@@ -23,7 +23,7 @@ from ppgan.utils.options import parse_args
 from ppgan.utils.config import get_config
 from ppgan.utils.setup import setup
 from ppgan.engine.trainer import Trainer
-
+from ppgan.utils.download import get_path_from_url
 
 def main(args, cfg):
     # init environment, include logger, dynamic graph, seed, device, train or test mode...
@@ -36,17 +36,22 @@ def main(args, cfg):
         trainer.resume(args.resume)
     # evaluate or finute, only load generator weights
     elif args.load:
-        trainer.load(args.load)
+        if args.load.startswith("https"):
+            vox_cpk_weight_url = args.load
+            weight_path = get_path_from_url(vox_cpk_weight_url)
+            trainer.load(weight_path)
+        else:
+            trainer.load(args.load)
 
     if args.evaluate_only:
         trainer.test()
         return
     # training, when keyboard interrupt save weights
-    try:
-        trainer.train()
-    except KeyboardInterrupt as e:
-        trainer.save(trainer.current_epoch)
-    trainer.close()
+    # try:
+    #     trainer.train()
+    # except KeyboardInterrupt as e:
+    #     trainer.save(trainer.current_epoch)
+    # trainer.close()
 
 
 if __name__ == '__main__':
