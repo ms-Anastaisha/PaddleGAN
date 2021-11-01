@@ -47,11 +47,11 @@ def main(args, cfg):
         trainer.test()
         return
     # training, when keyboard interrupt save weights
-    # try:
-    #     trainer.train()
-    # except KeyboardInterrupt as e:
-    #     trainer.save(trainer.current_epoch)
-    # trainer.close()
+    try:
+        trainer.train()
+    except KeyboardInterrupt as e:
+        trainer.save(trainer.current_epoch)
+    trainer.close()
 
 
 if __name__ == '__main__':
