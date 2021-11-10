@@ -211,9 +211,9 @@ class FirstOrderPredictor(BasePredictor):
             return predictions
 
         source_image = self.read_img(source_image)
-        if self.gfpganer:
-            _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
-            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+        # if self.gfpganer:
+        #     _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
+        #     source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
 
         reader = imageio.get_reader(driving_video)
         fps = reader.get_meta_data()['fps']
@@ -238,8 +238,18 @@ class FirstOrderPredictor(BasePredictor):
         indices = np.argsort(areas)
         bboxes = bboxes[indices]
         coords = coords[indices]
-        # for multi person
-        # 
+        
+        original_shape = source_image.shape[:2]
+        if self.gfpganer:
+            _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
+            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+
+        bboxes[:, :4] = scale_bboxes(original_shape, bboxes[:, :4].astype(np.float64), source_image.shape).round()
+        for i, c in enumerate(coords):
+            coords[i] = scale_coords(original_shape, np.array(c).astype(np.float64), source_image.shape).round()
+            coords[i] = list(coords[i])
+
+        face_image = source_image.copy()
         for rec in bboxes:
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
             face_image = cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
@@ -428,3 +438,41 @@ class FirstOrderPredictor(BasePredictor):
                 # box_masks.append(cv2.bitwise_and(cv2.resize(box_mask, (x2-x1, y2-y1)), 
                 #                                polygon2mask(coords[i], frame.shape[:2])[y1:y2, x1:x2]))
         return box_masks
+
+
+def scale_bboxes(img1_shape, bboxes, img0_shape, ratio_pad=None):
+
+    if ratio_pad is None:
+        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2
+    else:
+        gain = ratio_pad[0][0]
+        pad = ratio_pad[1]
+
+    bboxes[:, [0, 2]] -= pad[0]  # x padding
+    bboxes[:, [1, 3]] -= pad[1]  # y padding
+    bboxes[:, :4] /= gain
+
+    # clip coords
+    bboxes[:, [0, 2]] = bboxes[:, [0, 2]].clip(0, img0_shape[1])  # x1, x2
+    bboxes[:, [1, 3]] = bboxes[:, [1, 3]].clip(0, img0_shape[0])
+    return bboxes
+
+
+def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
+
+    if ratio_pad is None:
+        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2
+    else:
+        gain = ratio_pad[0][0]
+        pad = ratio_pad[1]
+
+    coords[:, 0] -= pad[0]  # x padding
+    coords[:, 1] -= pad[1]  # y padding
+    coords[:,] /= gain
+
+    # clip coords
+    coords[:, 0] = coords[:, 0].clip(0, img0_shape[1])  # x1, x2
+    coords[:, 1] = coords[:, 1].clip(0, img0_shape[0])
+    return coords
