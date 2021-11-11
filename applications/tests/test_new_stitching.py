@@ -31,11 +31,12 @@ resources = {
                     "/home/user/paddle/PaddleGAN/data/selfie2.JPEG"],
                     #"/home/user/paddle/PaddleGAN/data/selfie4.jpg", 
                     #"/home/user/paddle/PaddleGAN/data/selfie5.jpg"],
-    "driving_video": "/home/user/paddle/PaddleGAN/data/vox_example.mp4"
+    "driving_video": "/home/user/paddle/PaddleGAN/data/vox_example.mp4",
     # "driving_video": [
     #     "/home/user/paddle/PaddleGAN/data/vox_example.mp4",
     #     "/home/user/paddle/PaddleGAN/data/MMM.mp4"
     # ]
+    "audio": None
 }
 
 
@@ -47,5 +48,5 @@ if __name__ == '__main__':
         basename = os.path.basename(img_path) 
         name, ext = os.path.splitext(basename)
 
-        predictor.run(img_path, resources["driving_video"], name + "16sec" + '.mp4')
+        predictor.run(img_path, resources["driving_video"], name + "16sec" + '.mp4', resources["audio"])
     print("inference time (for 16 sec video):", (time.time() - start) / len(resources["source_image"]))

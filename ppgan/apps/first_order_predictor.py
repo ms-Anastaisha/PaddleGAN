@@ -180,23 +180,31 @@ class FirstOrderPredictor(BasePredictor):
             img = cv2.resize(img, dim)
         return img
 
+
     def write_with_audio(self, audio, out_frame, fps):
         if audio is None:
             imageio.mimsave(os.path.join(self.output, self.filename),
                             [frame for frame in out_frame],
                             fps=fps)
         else:
+            if audio.endswith(".mp3"):
+                audio_background = mp.AudioFileClip(audio)
+            elif audio.endswith(".mp4"):
+                audio_background = mp.VideoFileClip(audio)
+                audio_background = audio_background.audio 
             temp = 'tmp.mp4'
             imageio.mimsave(temp,
                             [frame for frame in out_frame],
                             fps=fps)
             videoclip_2 = mp.VideoFileClip(temp)
-            videoclip_2.set_audio(audio).write_videofile(os.path.join(self.output, self.filename),
+            if audio_background.duration > videoclip_2.duration: 
+                audio_background = audio_background.subclip(0, videoclip_2.duration)
+            videoclip_2.set_audio(audio_background).write_videofile(os.path.join(self.output, self.filename),
                                                             audio_codec="aac")
             os.remove(temp)
 
 
-    def run(self, source_image, driving_videos_paths, filename):
+    def run(self, source_image, driving_videos_paths, filename, audio):
         
         self.filename = filename
         # videoclip_1 = mp.VideoFileClip(driving_video)
@@ -295,7 +303,7 @@ class FirstOrderPredictor(BasePredictor):
 
         print("video stitching", time.time() - start)
         start = time.time()
-        self.write_with_audio(None, out_frame, fps)
+        self.write_with_audio(audio, out_frame, fps)
         print("video writing", time.time() - start)
 
 
