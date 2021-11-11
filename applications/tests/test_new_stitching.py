@@ -1,8 +1,12 @@
+import os
 import sys
-sys.path.insert(0, '/home/user/paddle/PaddleGAN/')
-import os 
+cur_path = os.path.abspath(os.path.dirname(__file__))
+root_path = os.path.split(cur_path)[0]
+sys.path.insert(0, os.path.dirname(root_path))
+
 from ppgan.apps.first_order_predictor import FirstOrderPredictor
 import time
+
 args = {
     "output": "output",
     "filename": "result.mp4",
@@ -21,13 +25,20 @@ args = {
     "mobile_net": False,
     "preprocessing": True
 }
+
 resources = {
     "source_image": [#"/home/user/paddle/PaddleGAN/data/selfie.jpeg", 
                     "/home/user/paddle/PaddleGAN/data/selfie2.JPEG"],
                     #"/home/user/paddle/PaddleGAN/data/selfie4.jpg", 
                     #"/home/user/paddle/PaddleGAN/data/selfie5.jpg"],
     "driving_video": "/home/user/paddle/PaddleGAN/data/vox_example.mp4"
+    # "driving_video": [
+    #     "/home/user/paddle/PaddleGAN/data/vox_example.mp4",
+    #     "/home/user/paddle/PaddleGAN/data/MMM.mp4"
+    # ]
 }
+
+
 if __name__ == '__main__':
     start = time.time()
     predictor = FirstOrderPredictor(**args)
