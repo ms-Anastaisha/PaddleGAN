@@ -277,49 +277,8 @@ class FirstOrderPredictor(BasePredictor):
             return out_frame
                
 
-        def run_multi():
-            ...
-
-        
-        # if self.gfpganer:
-        #     _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
-        #     source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
-
-        
-        
-
-        # driving_video = [
-        #     cv2.resize(frame, (self.image_size, self.image_size)) / 255.0 for frame in raw_driving_video
-        # ]
-        results = []
-        start = time.time()
-        bboxes, coords = self.extract_bbox(source_image.copy())
-        print("extract bboxes", time.time() - start)
-        print(str(len(bboxes)) + " persons have been detected")
-        areas = [x[4] for x in bboxes]
-        indices = np.argsort(areas)
-        bboxes = bboxes[indices[::-1]]
-        coords = coords[indices[::-1]]
-
-        original_shape = source_image.shape[:2]
-        if self.gfpganer:
-            _, _, source_image = self.gfpganer.enhance(
-                cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR)
-            )
-            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
-
-        bboxes[:, :4] = scale_bboxes(
-            original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
-        ).round()
-        for i, c in enumerate(coords):
-            coords[i] = scale_coords(
-                original_shape, np.array(c).astype(np.float64), source_image.shape
-            ).round()
-            coords[i] = list(coords[i])
-        if len(bboxes) == 1 or not self.multi_person:
-            out_frame = run_one(source_image, bboxes[0])
-        else:
-            face_image = source_image.copy()
+        def run_multi(source_image, bboxes):
+            results = []
             for i, rec in enumerate(bboxes):
                 adjust_bbox, center, axesLength = adjust_detection(self.detector, source_image.copy(), rec, 10)
                 if adjust_bbox is None:
@@ -359,8 +318,6 @@ class FirstOrderPredictor(BasePredictor):
             #     box_masks = self.extract_masks(results, coords, source_image)
             #     print("masks extraction: ", time.time() - start)
 
-            start = time.time()
-
             patch = np.zeros(source_image.shape).astype("uint8")
             mask = np.zeros(source_image.shape[:2]).astype("uint8")
             for i in trange(len(driving_video)):
@@ -389,7 +346,42 @@ class FirstOrderPredictor(BasePredictor):
 
                 out_frame.append(frame)
                 patch[:, :, :] = 0
-                
+            return out_frame
+
+        
+        # if self.gfpganer:
+        #     _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
+        #     source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+
+        start = time.time()
+        bboxes, coords = self.extract_bbox(source_image.copy())
+        print("extract bboxes", time.time() - start)
+        print(str(len(bboxes)) + " persons have been detected")
+        areas = [x[4] for x in bboxes]
+        indices = np.argsort(areas)
+        bboxes = bboxes[indices[::-1]]
+        coords = coords[indices[::-1]]
+
+        original_shape = source_image.shape[:2]
+        if self.gfpganer:
+            _, _, source_image = self.gfpganer.enhance(
+                cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR)
+            )
+            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+
+        bboxes[:, :4] = scale_bboxes(
+            original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
+        ).round()
+        for i, c in enumerate(coords):
+            coords[i] = scale_coords(
+                original_shape, np.array(c).astype(np.float64), source_image.shape
+            ).round()
+            coords[i] = list(coords[i])
+        if len(bboxes) == 1 or not self.multi_person:
+            out_frame = run_one(source_image, bboxes[0])
+        else:
+            out_frame = run_multi(source_image, bboxes)
+            
         print("video stitching", time.time() - start)
         start = time.time()
         self.write_with_audio(audio, out_frame, fps)
@@ -628,3 +620,7 @@ def adjust_detection(detector, image, bbox, pad):
     y21 = min(h, cy + int(bh*0.9))
     x21 = min(w, cx + int(0.7 * bw))
     return [x11, y11, x21, y21], (cx, cy), (int((y21-y11)*0.5), int((x21-x11)*0.45))
+
+
+def move_ellipses(ellipses):
+    ...
