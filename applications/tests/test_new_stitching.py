@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/anastasia/paddleGan/PaddleGAN/')
+sys.path.insert(0, '/home/user/paddle/PaddleGAN/')
 import os 
 from ppgan.apps.first_order_predictor import FirstOrderPredictor
 import time
@@ -8,26 +8,26 @@ args = {
     "filename": "result.mp4",
     "weight_path": None,
     "relative": True,
-    "adapt_scale": False,
+    "adapt_scale": True,
     "find_best_frame": False,
     "best_frame": None,
     "ratio": 0.4,
     "face_detector": "sfd",
     "multi_person":  True,
     "image_size": 256,
-    "batch_size": 64,
+    "batch_size": 16,
     "face_enhancement": False,
-    "gfpgan_model_path": "/home/anastasia/paddleGan/PaddleGAN/GFPGAN/experiments/pretrained_models/GFPGANCleanv1-NoCE-C2.pth",
+    "gfpgan_model_path": "/home/user/paddle/PaddleGAN/experiments1/pretrained_models/GFPGANCleanv1-NoCE-C2.pth",
     "mobile_net": False,
-    "preprocessing": True,
-    "face_align": False,
+    "preprocessing": False,
+    "face_align": False
 }
 resources = {
-    "source_image": [#"/home/user/paddle/PaddleGAN/data/selfie.jpeg", 
-                    "/home/anastasia/paddleGan/PaddleGAN/data/selfie.jpeg"],
+    "source_image": ["/home/user/paddle/PaddleGAN/data/selfie.jpeg"], 
+                    #"/home/user/paddle/PaddleGAN/data/selfie2.JPEG"],
                     #"/home/user/paddle/PaddleGAN/data/selfie4.jpg", 
                     #"/home/user/paddle/PaddleGAN/data/selfie5.jpg"],
-    "driving_video": "/home/anastasia/paddleGan/PaddleGAN/data/Jingle Bells A Cappella Backtrack_1024.mp4"
+    "driving_video": "/home/user/paddle/PaddleGAN/data/jingle_bells_acapella_part.mp4"
 }
 if __name__ == '__main__':
     start = time.time()
@@ -37,5 +37,5 @@ if __name__ == '__main__':
         basename = os.path.basename(img_path) 
         name, ext = os.path.splitext(basename)
 
-        predictor.run(img_path, resources["driving_video"], name + "16sec ellipse" + '.mp4')
+        predictor.run(img_path, resources["driving_video"], name  + 'acapella ellipse' + '.mp4')
     print("inference time (for 16 sec video):", (time.time() - start) / len(resources["source_image"]))
