@@ -15,6 +15,7 @@
 import os
 import sys
 import cv2
+from pandas.core import frame
 
 import yaml
 import imageio
@@ -136,6 +137,11 @@ class FirstOrderPredictor(BasePredictor):
         self.generator, self.kp_detector = self.load_checkpoints(
             self.cfg, self.weight_path
         )
+        self.detector = face_detection.FaceAlignment(
+            face_detection.LandmarksType._2D,
+            flip_input=False,
+            face_detector=self.face_detector,
+        )
 
         # from realesrgan import RealESRGANer
         # bg_upsampler = RealESRGANer(
@@ -191,15 +197,15 @@ class FirstOrderPredictor(BasePredictor):
 
     def write_with_audio(self, audio, out_frame, fps):
         if audio is None:
-            out = cv2.VideoWriter('outpy.avi',cv2.VideoWriter_fourcc('M','J','P','G'), 10, (out_frame[0].shape[1],
-                                                                                            out_frame[0].shape[0]))
-            # imageio.mimsave(
-            #     os.path.join(self.output, self.filename),
-            #     [frame for frame in out_frame],
-            #     fps=fps,
-            # )
-            for frame in out_frame:
-                out.write(frame)
+            # out = cv2.VideoWriter( os.path.join(self.output, self.filename),cv2.VideoWriter_fourcc('M','J','P','G'), 10, (out_frame[0].shape[1],
+            #                                                                                 out_frame[0].shape[0]))
+            imageio.mimsave(
+                os.path.join(self.output, self.filename),
+                out_frame,
+                fps=fps,
+            )
+            # for frame in out_frame:
+            #     out.write(frame)
         else:
             temp = "tmp.mp4"
             imageio.mimsave(temp, [frame for frame in out_frame], fps=fps)
@@ -273,22 +279,35 @@ class FirstOrderPredictor(BasePredictor):
             ).round()
             coords[i] = list(coords[i])
 
+        for bbox in bboxes:
+            adjust_detection(self.detector, source_image.copy(), bbox, 10)
+
         face_image = source_image.copy()
         for i, rec in enumerate(bboxes):
-            face_image = source_image.copy()[rec[1] : rec[3], rec[0] : rec[2]]
-            
+            adjust_bbox, center, axesLength = adjust_detection(self.detector, source_image.copy(), rec, 10)
+            face_image = source_image.copy()[adjust_bbox[1] : adjust_bbox[3], 
+                                            adjust_bbox[0] : adjust_bbox[2]]
+            h, w = source_image.shape[:2]
+            padding_ratiox, padding_ratioy =  int(w*0.05)//2, int(h*0.05)//2 
             face_image_padded = cv2.copyMakeBorder(face_image,
-            10,10,10,10, cv2.BORDER_CONSTANT,value=[0,0,0])
+            padding_ratioy,padding_ratioy,padding_ratiox,padding_ratiox, 
+            cv2.BORDER_CONSTANT, value=[0,0,0])
+            h_, w_ = face_image_padded.shape[:2]
             face_image = (
                 cv2.resize(face_image_padded, (self.image_size, self.image_size)) / 255.0
             )
             predictions = get_prediction(face_image)
-            imageio.mimsave(
-                "%d.mp4" % ((i + 1) * 13), [frame for frame in predictions], fps=fps
-            )
+            
+            
+            # imageio.mimsave(
+            #     "%d.mp4" % ((i + 1) * 16), [cv2.resize(frame, (w_,h_))[padding_ratioy:-padding_ratioy,
+            #                                                           padding_ratiox:-padding_ratiox] for frame in predictions], fps=fps
+            # )
             results.append(
                 {
-                    "rec": rec,
+                    "adjust_bbox": adjust_bbox,
+                    "center_ellipse": center,
+                    "axesLength": axesLength, 
                     "predict": [predictions[i] for i in range(predictions.shape[0])],
                 }
             )
@@ -296,11 +315,11 @@ class FirstOrderPredictor(BasePredictor):
                 break
         out_frame = []
 
-        start = time.time()
+        # start = time.time()
 
-        if len(results) > 1:
-            box_masks = self.extract_masks(results, coords, source_image)
-            print("masks extraction: ", time.time() - start)
+        # if len(results) > 1:
+        #     box_masks = self.extract_masks(results, coords, source_image)
+        #     print("masks extraction: ", time.time() - start)
 
         start = time.time()
 
@@ -311,7 +330,7 @@ class FirstOrderPredictor(BasePredictor):
             # patch = np.zeros(frame.shape).astype('uint8')
             # mask = np.zeros(frame.shape[:2]).astype('uint8')
             for j, result in enumerate(results):
-                x1, y1, x2, y2, _ = result["rec"]
+                x1, y1, x2, y2 = result["adjust_bbox"]
 
                 out = result["predict"][i]
                 out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
@@ -320,11 +339,14 @@ class FirstOrderPredictor(BasePredictor):
                     frame[y1:y2, x1:x2] = out
                     break
                 else:
+                    center_ellipse = result["center_ellipse"]
+                    axesLength = result["axesLength"]
                     # patch = np.zeros(frame.shape).astype('uint8')
-                    patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
+                    patch[y1:y2, x1:x2] = out #* np.dstack([(box_masks[j] > 0)] * 3)
 
                     # mask = np.zeros(frame.shape[:2]).astype('uint8')
-                    mask[y1:y2, x1:x2] = box_masks[j]
+                    # mask[y1:y2, x1:x2] = box_masks[j]
+                    cv2.ellipse(mask, center_ellipse, axesLength, 90, 0, 360, (255,255,255), -1)
                 frame = cv2.copyTo(patch, mask, frame)
 
             out_frame.append(frame)
@@ -381,18 +403,21 @@ class FirstOrderPredictor(BasePredictor):
             
             
             driving = paddle.to_tensor(
-                np.array(driving_video[:1]).astype(
+                np.array(driving_video[:min(self.batch_size, len(driving_video))]).astype(
                     np.float32)).transpose([0, 3, 1, 2])
-            #kp_driving_initial = kp_detector(driving[:1])
+            kp_driving_initial = kp_detector(driving[:1])
         
             begin_idx = 0
             for _ in tqdm(range(int(np.ceil(float(len(driving_video)) / self.batch_size)))):
+                
                 frame_num = min(self.batch_size, len(driving_video) - begin_idx)
+                # kp_driving_initial["value"] = kp_driving_initial["value"][:frame_num]
+                # kp_driving_initial["jacobian"] = kp_driving_initial["jacobian"][:frame_num]
+                #kp_driving_initial = kp_detector(driving[:1])
                 driving = paddle.to_tensor(
                     np.array(driving_video[begin_idx:begin_idx + frame_num]).astype(
                     np.float32)).transpose([0, 3, 1, 2])
-                kp_driving_initial = kp_detector(driving[:1])
-                # driving_frame = driving[begin_idx: begin_idx + frame_num]
+                #driving_frame = driving[begin_idx: begin_idx + frame_num]
                 kp_driving = kp_detector(driving)
                 kp_source_img = {}
                 kp_source_img["value"] = kp_source_batch["value"][0:frame_num]
@@ -414,17 +439,12 @@ class FirstOrderPredictor(BasePredictor):
                 # print(img.shape)
                 predictions.append(img)
                 begin_idx += frame_num
+                #kp_driving_initial = kp_detector(driving)
+         
         return np.concatenate(predictions)
 
     def extract_bbox(self, image):
-        detector = face_detection.FaceAlignment(
-            face_detection.LandmarksType._2D,
-            flip_input=False,
-            face_detector=self.face_detector,
-        )
-
-        # frame = [image]
-        predictions = detector.get_detections_for_image(np.array(image))
+        predictions = self.detector.get_detections_for_image(np.array(image))
         result, coords = self.detection_func(image, predictions)
         return np.array(result), np.array(coords)
 
@@ -501,6 +521,11 @@ class FirstOrderPredictor(BasePredictor):
         return box_masks
 
 
+
+
+
+
+
 def scale_bboxes(img1_shape, bboxes, img0_shape, ratio_pad=None):
 
     if ratio_pad is None:
@@ -542,3 +567,25 @@ def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
     coords[:, 0] = coords[:, 0].clip(0, img0_shape[1])  # x1, x2
     coords[:, 1] = coords[:, 1].clip(0, img0_shape[0])
     return coords
+
+def adjust_detection(detector, image, bbox, pad):
+    x1, y1, x2, y2, _ = bbox
+    cx, cy = (x1 + x2) // 2, (y1+y2)//2
+    image_crop = image[y1:y2, x1:x2]
+    detection = detector.get_detections_for_image(np.array(image_crop))
+    if len(detection) > 1:
+        center_dist = [np.sqrt(((det[0]+det[2])//2 - cx)**2 + ((det[1]+det[3])//2 - cy)**2) for det in detection]
+        ids = np.argsort(center_dist)
+        detection = [detection[ids[0]]]
+    x1_, y1_, x2_, y2_ = detection[0]
+    x1_, y1_, x2_, y2_ = x1+x1_, y1+y1_,x2_+x1,y2_+y1
+    bh = y2_ - y1_
+    bw = x2_ - x1_
+    cy = y1_ + int(bh / 2)
+    cx = x1_ + int(bw / 2)
+    h, w, _ = image.shape
+    y11 = max(0, cy - int(bh*0.9))
+    x11 = max(0, cx - int(0.7 * bw))
+    y21 = min(h, cy + int(bh*0.9))
+    x21 = min(w, cx + int(0.7 * bw))
+    return [x11, y11, x21, y21], (cx, cy), (int((y21-y11)*0.75), int((x21-x11)*0.75))
