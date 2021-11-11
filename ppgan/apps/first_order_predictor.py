@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from itertools import cycle
 import os
 import sys
 import cv2
@@ -195,12 +196,13 @@ class FirstOrderPredictor(BasePredictor):
             os.remove(temp)
 
 
-    def run(self, source_image, driving_video, filename):
+    def run(self, source_image, driving_videos_paths, filename):
         
         self.filename = filename
-        videoclip_1 = mp.VideoFileClip(driving_video)
-        audio = videoclip_1.audio
-        def get_prediction(face_image):
+        # videoclip_1 = mp.VideoFileClip(driving_video)
+        # audio = videoclip_1.audio
+        
+        def get_prediction(face_image, driving_video):
             predictions = self.make_animation(
                     face_image,
                     driving_video,
@@ -215,20 +217,23 @@ class FirstOrderPredictor(BasePredictor):
             _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
             source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
 
-        reader = imageio.get_reader(driving_video)
-        fps = reader.get_meta_data()['fps']
+        if isinstance(driving_videos_paths, str):
+            driving_videos_paths = [driving_videos_paths]
 
+        driving_videos = []
+        for driving_video in driving_videos_paths:
+            reader = imageio.get_reader(driving_video)
+            fps = reader.get_meta_data()['fps']
+            
+            try:
+                driving_video = [cv2.resize(im, (self.image_size, self.image_size)) / 255.0  for im in reader]
+            except RuntimeError:
+                print("Read driving video error!")
+                pass
+            reader.close()
+
+            driving_videos.append(driving_video)
         
-        try:
-            driving_video = [cv2.resize(im, (self.image_size, self.image_size)) / 255.0  for im in reader]
-        except RuntimeError:
-            print("Read driving video error!")
-            pass
-        reader.close()
-
-        # driving_video = [
-        #     cv2.resize(frame, (self.image_size, self.image_size)) / 255.0 for frame in raw_driving_video
-        # ]
         results = []
         start = time.time()
         bboxes, coords = self.extract_bbox(source_image.copy())
@@ -238,51 +243,59 @@ class FirstOrderPredictor(BasePredictor):
         indices = np.argsort(areas)
         bboxes = bboxes[indices]
         coords = coords[indices]
-        # for multi person
-        # 
-        for rec in bboxes:
+
+        bbox2video = {}
+        if len(bboxes) <= len(driving_videos):
+            bbox2video = {i: i for i in range(len(bboxes))}
+        else:
+            pool = cycle(range(len(driving_videos)))
+            bbox2video = {i: next(pool) for i in range(len(bboxes))}
+
+        for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
             face_image = cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
-            predictions = get_prediction(face_image)
+            predictions = get_prediction(face_image, driving_videos[bbox2video[i]])
             results.append({'rec': rec, 'predict': [predictions[i] for i in range(predictions.shape[0])]})
             if len(bboxes) == 1 or not self.multi_person:
                 break
+        
         out_frame = []
         start = time.time()
         box_masks = self.extract_masks(results, coords, source_image)
         print("masks extraction: ", time.time()-start)
         start = time.time()
-
+        
         patch = np.zeros(source_image.shape).astype('uint8')
         mask = np.zeros(source_image.shape[:2]).astype('uint8')
-        for i in trange(len(driving_video)):
+        
+        for i in trange(max([len(i) for i in driving_videos])):
             frame = source_image.copy()
-            # patch = np.zeros(frame.shape).astype('uint8')
-            # mask = np.zeros(frame.shape[:2]).astype('uint8')
+
             for j, result  in enumerate(results):
                 x1, y1, x2, y2, _ = result['rec']
-
-                out = result['predict'][i]
-                out = cv2.resize(out.astype(np.uint8), (x2-x1, y2-y1))
+                
+                if i >= len(result['predict']):
+                    pass
+                else:
+                    out = result['predict'][i]
+                    out = cv2.resize(out.astype(np.uint8), (x2-x1, y2-y1))
         
-                if len(results) == 1:
-                    frame[y1:y2, x1:x2] = out
-                    break
-                else: 
-                    #patch = np.zeros(frame.shape).astype('uint8')
-                    patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)]*3)
-                    
-                    #mask = np.zeros(frame.shape[:2]).astype('uint8')
-                    mask[y1:y2, x1:x2] = box_masks[j]
-                frame = cv2.copyTo(patch, mask, frame)
+                    if len(results) == 1:
+                        frame[y1:y2, x1:x2] = out
+                        break
+                    else: 
+                        patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)]*3)
+                        
+                        mask[y1:y2, x1:x2] = box_masks[j]
+                    frame = cv2.copyTo(patch, mask, frame)
              
             out_frame.append(frame)
             patch[:, :, :] = 0
-            mask[:, :] = 0          
+            mask[:, :] = 0            
 
         print("video stitching", time.time() - start)
         start = time.time()
-        self.write_with_audio(audio, out_frame, fps)
+        self.write_with_audio(None, out_frame, fps)
         print("video writing", time.time() - start)
 
 
@@ -372,7 +385,6 @@ class FirstOrderPredictor(BasePredictor):
         predictions = detector.get_detections_for_image(np.array(image))
         result, coords = self.detection_func(image, predictions)
         return np.array(result), np.array(coords)
-
 
     def extract_masks(self, results, coords, source_image, model_type="face_seg"):
         if len(results) == 1:
