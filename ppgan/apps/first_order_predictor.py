@@ -220,23 +220,8 @@ class FirstOrderPredictor(BasePredictor):
         self.filename = filename
         videoclip_1 = mp.VideoFileClip(driving_video)
         audio = videoclip_1.audio
-
-        def get_prediction(face_image):
-            predictions = self.make_animation(
-                face_image,
-                driving_video,
-                self.generator,
-                self.kp_detector,
-                relative=self.relative,
-                adapt_movement_scale=self.adapt_scale,
-            )
-            return predictions
-
+        print(audio)
         source_image = self.read_img(source_image)
-        # if self.gfpganer:
-        #     _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
-        #     source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
-
         reader = imageio.get_reader(driving_video)
         fps = reader.get_meta_data()["fps"]
 
@@ -250,6 +235,59 @@ class FirstOrderPredictor(BasePredictor):
             pass
         reader.close()
 
+
+        def get_prediction(face_image):
+            predictions = self.make_animation(
+                face_image,
+                driving_video,
+                self.generator,
+                self.kp_detector,
+                relative=self.relative,
+                adapt_movement_scale=self.adapt_scale,
+            )
+            return predictions
+
+        def run_one(source_image, rec):
+            results = []
+            out_frame = []
+            adjust_bbox, center, axesLength = adjust_detection(self.detector, source_image.copy(), rec, 10)
+            face_image = source_image.copy()[adjust_bbox[1] : adjust_bbox[3], 
+                                            adjust_bbox[0] : adjust_bbox[2]]
+            h, w = face_image.shape[:2]
+            face_image = (
+                    cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
+                )
+            predictions = get_prediction(face_image)
+            
+            results.append(
+                    {
+                        "adjust_bbox": adjust_bbox,
+                        "center_ellipse": center,
+                        "axesLength": axesLength, 
+                        "predict": [cv2.resize(predictions[i],( w, h)) for i in range(predictions.shape[0])],
+                    }
+                )
+            for i in trange(len(driving_video)):
+                frame = source_image.copy()
+                x1, y1, x2, y2 = results[0]["adjust_bbox"]
+                out = results[0]["predict"][i]
+                frame[y1:y2, x1:x2] = out
+                out_frame.append(frame)
+            
+            return out_frame
+               
+
+        def run_multi():
+            ...
+
+        
+        # if self.gfpganer:
+        #     _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
+        #     source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+
+        
+        
+
         # driving_video = [
         #     cv2.resize(frame, (self.image_size, self.image_size)) / 255.0 for frame in raw_driving_video
         # ]
@@ -260,8 +298,8 @@ class FirstOrderPredictor(BasePredictor):
         print(str(len(bboxes)) + " persons have been detected")
         areas = [x[4] for x in bboxes]
         indices = np.argsort(areas)
-        bboxes = bboxes[indices]
-        coords = coords[indices]
+        bboxes = bboxes[indices[::-1]]
+        coords = coords[indices[::-1]]
 
         original_shape = source_image.shape[:2]
         if self.gfpganer:
@@ -278,81 +316,80 @@ class FirstOrderPredictor(BasePredictor):
                 original_shape, np.array(c).astype(np.float64), source_image.shape
             ).round()
             coords[i] = list(coords[i])
+        if len(bboxes) == 1 or not self.multi_person:
+            out_frame = run_one(source_image, bboxes[0])
+        else:
+            face_image = source_image.copy()
+            for i, rec in enumerate(bboxes):
+                adjust_bbox, center, axesLength = adjust_detection(self.detector, source_image.copy(), rec, 10)
+                if adjust_bbox is None:
+                    continue
+                face_image = source_image.copy()[adjust_bbox[1] : adjust_bbox[3], 
+                                                adjust_bbox[0] : adjust_bbox[2]]
+                
+                h, w = face_image.shape[:2]
+                padding_ratiox, padding_ratioy =  int(w*0.08), int(h*0.08)
+                face_image_padded = cv2.copyMakeBorder(face_image,
+                padding_ratioy,padding_ratioy,padding_ratiox,padding_ratiox, 
+                cv2.BORDER_REPLICATE)
+                h_, w_ = face_image_padded.shape[:2]
+                face_image = (
+                        cv2.resize(face_image_padded, (self.image_size, self.image_size)) / 255.0
+                    )
+                predictions = get_prediction(face_image)
+                    
+                results.append(
+                        {
+                            "adjust_bbox": adjust_bbox,
+                            "center_ellipse": center,
+                            "axesLength": axesLength, 
+                        "axesLength": axesLength, 
+                            "axesLength": axesLength, 
+                        "axesLength": axesLength, 
+                            "axesLength": axesLength, 
+                            "predict": [cv2.resize(cv2.resize(predictions[i],( w_, h_))[int(padding_ratioy*1.1):-int(1.1*padding_ratioy), 
+                                                                                        int(padding_ratiox*1.1):-int(1.1*padding_ratiox)], (w,h))  for i in range(predictions.shape[0])],
+                        }
+                    )
+            out_frame = []
 
-        for bbox in bboxes:
-            adjust_detection(self.detector, source_image.copy(), bbox, 10)
+            # start = time.time()
 
-        face_image = source_image.copy()
-        for i, rec in enumerate(bboxes):
-            adjust_bbox, center, axesLength = adjust_detection(self.detector, source_image.copy(), rec, 10)
-            face_image = source_image.copy()[adjust_bbox[1] : adjust_bbox[3], 
-                                            adjust_bbox[0] : adjust_bbox[2]]
-            h, w = source_image.shape[:2]
-            padding_ratiox, padding_ratioy =  int(w*0.05)//2, int(h*0.05)//2 
-            face_image_padded = cv2.copyMakeBorder(face_image,
-            padding_ratioy,padding_ratioy,padding_ratiox,padding_ratiox, 
-            cv2.BORDER_CONSTANT, value=[0,0,0])
-            h_, w_ = face_image_padded.shape[:2]
-            face_image = (
-                cv2.resize(face_image_padded, (self.image_size, self.image_size)) / 255.0
-            )
-            predictions = get_prediction(face_image)
-            
-            
-            # imageio.mimsave(
-            #     "%d.mp4" % ((i + 1) * 16), [cv2.resize(frame, (w_,h_))[padding_ratioy:-padding_ratioy,
-            #                                                           padding_ratiox:-padding_ratiox] for frame in predictions], fps=fps
-            # )
-            results.append(
-                {
-                    "adjust_bbox": adjust_bbox,
-                    "center_ellipse": center,
-                    "axesLength": axesLength, 
-                    "predict": [predictions[i] for i in range(predictions.shape[0])],
-                }
-            )
-            if len(bboxes) == 1 or not self.multi_person:
-                break
-        out_frame = []
+            # if len(results) > 1:
+            #     box_masks = self.extract_masks(results, coords, source_image)
+            #     print("masks extraction: ", time.time() - start)
 
-        # start = time.time()
+            start = time.time()
 
-        # if len(results) > 1:
-        #     box_masks = self.extract_masks(results, coords, source_image)
-        #     print("masks extraction: ", time.time() - start)
+            patch = np.zeros(source_image.shape).astype("uint8")
+            mask = np.zeros(source_image.shape[:2]).astype("uint8")
+            for i in trange(len(driving_video)):
+                frame = source_image.copy()
+                # patch = np.zeros(frame.shape).astype('uint8')
+                # mask = np.zeros(frame.shape[:2]).astype('uint8')
+                for j, result in enumerate(results):
+                    x1, y1, x2, y2 = result["adjust_bbox"]
 
-        start = time.time()
-
-        patch = np.zeros(source_image.shape).astype("uint8")
-        mask = np.zeros(source_image.shape[:2]).astype("uint8")
-        for i in trange(len(driving_video)):
-            frame = source_image.copy()
-            # patch = np.zeros(frame.shape).astype('uint8')
-            # mask = np.zeros(frame.shape[:2]).astype('uint8')
-            for j, result in enumerate(results):
-                x1, y1, x2, y2 = result["adjust_bbox"]
-
-                out = result["predict"][i]
-                out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
-
-                if len(results) == 1:
-                    frame[y1:y2, x1:x2] = out
-                    break
-                else:
+                    out = result["predict"][i].astype(np.uint8)
+                    #out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
+                    # out = out.astype(np.uint8)
                     center_ellipse = result["center_ellipse"]
                     axesLength = result["axesLength"]
-                    # patch = np.zeros(frame.shape).astype('uint8')
-                    patch[y1:y2, x1:x2] = out #* np.dstack([(box_masks[j] > 0)] * 3)
+                        # patch = np.zeros(frame.shape).astype('uint8')
+                        #patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
 
-                    # mask = np.zeros(frame.shape[:2]).astype('uint8')
-                    # mask[y1:y2, x1:x2] = box_masks[j]
+                        # mask = np.zeros(frame.shape[:2]).astype('uint8')
+                        # mask[y1:y2, x1:x2] = box_masks[j]
+                        
+                    mask[:, :] = 0
                     cv2.ellipse(mask, center_ellipse, axesLength, 90, 0, 360, (255,255,255), -1)
-                frame = cv2.copyTo(patch, mask, frame)
+                    patch_mask = patch[y1:y2, x1:x2]
+                    patch[y1:y2, x1:x2][patch_mask == 0] = (out  * np.dstack([(mask[y1:y2, x1:x2] > 0)] * 3))[patch_mask == 0] 
+                    frame = cv2.copyTo(patch, mask, frame)
 
-            out_frame.append(frame)
-            patch[:, :, :] = 0
-            mask[:, :] = 0
-
+                out_frame.append(frame)
+                patch[:, :, :] = 0
+                
         print("video stitching", time.time() - start)
         start = time.time()
         self.write_with_audio(audio, out_frame, fps)
@@ -459,9 +496,9 @@ class FirstOrderPredictor(BasePredictor):
         frame = source_image.copy()
         polygons = [polygon2ellipsemask(coord, frame.shape[:2]) for coord in coords]
         for i in tqdm(range(0, len(results), 2)):
-            x1, y1, x2, y2, _ = results[i]["rec"]
+            x1, y1, x2, y2 = results[i]["adjust_bbox"]
             if i + 1 < len(results):
-                x11, y11, x21, y21, _ = results[i + 1]["rec"]
+                x11, y11, x21, y21 = results[i + 1]["adjust_bbox"]
                 width, height = max(x2 - x1, x21 - x11), max(y2 - y1, y21 - y11)
                 mask_image = cv2.hconcat(
                     [
@@ -484,22 +521,22 @@ class FirstOrderPredictor(BasePredictor):
                 # box_masks.append(cv2.bitwise_and(cv2.resize(box_mask[:, w//2:], (x21-x11, y21-y11)),
                 #                                polygon2mask(coords[i+1], frame.shape[:2])[y11:y21, x11:x21]))
                 ### masks + ellipse detections
-                box_masks.append(
-                    cv2.bitwise_and(
-                        cv2.resize(box_mask[:, : w // 2], (x2 - x1, y2 - y1)),
-                        polygons[i][y1:y2, x1:x2],
-                    )
-                )
-                box_masks.append(
-                    cv2.bitwise_and(
-                        cv2.resize(box_mask[:, w // 2 :], (x21 - x11, y21 - y11)),
-                        polygons[i + 1][y11:y21, x11:x21],
-                    )
-                )
+                # box_masks.append(
+                #     cv2.bitwise_and(
+                #         cv2.resize(box_mask[:, : w // 2], (x2 - x1, y2 - y1)),
+                #         polygons[i][y1:y2, x1:x2],
+                #     )
+                # )
+                # box_masks.append(
+                #     cv2.bitwise_and(
+                #         cv2.resize(box_mask[:, w // 2 :], (x21 - x11, y21 - y11)),
+                #         polygons[i + 1][y11:y21, x11:x21],
+                #     )
+                # )
 
                 ### just ellipse detections
-                # box_masks.append(polygons[i][y1:y2, x1:x2])
-                # box_masks.append(polygons[i+1][y11:y21, x11:x21])
+                box_masks.append(polygons[i][y1:y2, x1:x2])
+                box_masks.append(polygons[i+1][y11:y21, x11:x21])
             else:
                 if model_type == "face_parser":
                     box_mask = face_model.parse(
@@ -512,9 +549,9 @@ class FirstOrderPredictor(BasePredictor):
                 else:
                     box_mask = face_model(frame[y1:y2, x1:x2])
                 ### just ellipse detections
-                # box_masks.append(polygons[i][y1:y2, x1:x2])
+                box_masks.append(polygons[i][y1:y2, x1:x2])
                 ### masks + ellipse detections
-                box_masks.append(cv2.bitwise_and(box_mask, polygons[i][y1:y2, x1:x2]))
+                # box_masks.append(cv2.bitwise_and(box_mask, polygons[i][y1:y2, x1:x2]))
                 ### masks + detections
                 # box_masks.append(cv2.bitwise_and(cv2.resize(box_mask, (x2-x1, y2-y1)),
                 #                                polygon2mask(coords[i], frame.shape[:2])[y1:y2, x1:x2]))
@@ -573,6 +610,8 @@ def adjust_detection(detector, image, bbox, pad):
     cx, cy = (x1 + x2) // 2, (y1+y2)//2
     image_crop = image[y1:y2, x1:x2]
     detection = detector.get_detections_for_image(np.array(image_crop))
+    if len(detection) == 0:
+        return None, None, None
     if len(detection) > 1:
         center_dist = [np.sqrt(((det[0]+det[2])//2 - cx)**2 + ((det[1]+det[3])//2 - cy)**2) for det in detection]
         ids = np.argsort(center_dist)
@@ -588,4 +627,4 @@ def adjust_detection(detector, image, bbox, pad):
     x11 = max(0, cx - int(0.7 * bw))
     y21 = min(h, cy + int(bh*0.9))
     x21 = min(w, cx + int(0.7 * bw))
-    return [x11, y11, x21, y21], (cx, cy), (int((y21-y11)*0.75), int((x21-x11)*0.75))
+    return [x11, y11, x21, y21], (cx, cy), (int((y21-y11)*0.5), int((x21-x11)*0.45))
