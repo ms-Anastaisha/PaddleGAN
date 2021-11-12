@@ -28,7 +28,6 @@ root_path = os.path.split(cur_path)[0]
 sys.path.insert(0, os.path.dirname(root_path))
 
 import paddle
-import ppdet
 from ppgan.utils.download import get_path_from_url
 from ppgan.utils.animate import normalize_kp
 from ppgan.modules.keypoint_detector import KPDetector
