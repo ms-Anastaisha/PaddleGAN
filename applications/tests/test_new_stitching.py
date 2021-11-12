@@ -21,10 +21,10 @@ args = {
     "image_size": 256,
     "batch_size": 16,
     "face_enhancement": False,
-    "gfpgan_model_path": None, #"/home/user/paddle/PaddleGAN/experiments1/pretrained_models/GFPGANCleanv1-NoCE-C2.pth",
+    "gfpgan_model_path": None, #"/home/user/paddle/PaddleGAN/experiments/pretrained_models/GFPGANCleanv1-NoCE-C2.pth",
     "mobile_net": False,
-    "preprocessing": False,
-    "face_align": False
+    "preprocessing": True,
+    "solov_path": "/home/user/paddle/PaddleGAN/PaddleDetection/solov2_r50_enhance_coco"
 }
 
 resources = {
@@ -32,11 +32,13 @@ resources = {
                     "/home/user/paddle/PaddleGAN/data/selfie2.JPEG"],
                     #"/home/user/paddle/PaddleGAN/data/selfie4.jpg", 
                     #"/home/user/paddle/PaddleGAN/data/selfie5.jpg"],
-    "driving_video": "/home/user/paddle/PaddleGAN/data/vox_example.mp4",
-    # "driving_video": [
-    #     "/home/user/paddle/PaddleGAN/data/vox_example.mp4",
-    #     "/home/user/paddle/PaddleGAN/data/MMM.mp4"
-    # ]
+    #"driving_video": "/home/user/paddle/PaddleGAN/data/vox_example.mp4",
+    "driving_video": [
+        "/home/user/paddle/PaddleGAN/data/Remini_Animation (1).mp4",
+        "/home/user/paddle/PaddleGAN/data/video10.mp4",
+        "/home/user/paddle/PaddleGAN/data/jingle_bells_acapella_part.mp4", 
+
+     ],
     "audio": None
 }
 

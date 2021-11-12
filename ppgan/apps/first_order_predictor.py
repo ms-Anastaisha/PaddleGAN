@@ -46,15 +46,15 @@ sys.path.insert(0, "../../PaddleDetection/deploy/python")
 from PaddleDetection.deploy.python.infer import *
 
 
-def load_detector():
+def load_detector(model_path):
     pred_config = PredictConfig(
-        "/home/user/paddle/PaddleGAN/PaddleDetection/solov2_r50_enhance_coco"
+        model_path
     )
     detector_func = "DetectorSOLOv2"
 
     detector = eval(detector_func)(
         pred_config,
-        "/home/user/paddle/PaddleGAN/PaddleDetection/solov2_r50_enhance_coco",
+        model_path,
         device="GPU",
         run_mode="fluid",
         batch_size=1,
@@ -80,7 +80,8 @@ class FirstOrderPredictor(BasePredictor):
                  batch_size=1,
                  mobile_net=False, 
                  preprocessing=True,
-                 face_align=False):
+                 face_align=False, 
+                solov_path=None):
         if config is not None and isinstance(config, str):
             with open(config) as f:
                 self.cfg = yaml.load(f, Loader=yaml.SafeLoader)
@@ -147,6 +148,7 @@ class FirstOrderPredictor(BasePredictor):
         start = time.time()
         self.generator, self.kp_detector = self.load_checkpoints(
             self.cfg, self.weight_path)
+        self.solov2 = load_detector(solov_path)
       
         
         # from realesrgan import RealESRGANer
@@ -416,12 +418,11 @@ class FirstOrderPredictor(BasePredictor):
 
     def extract_masks(self, bboxes, source_image):
         if len(bboxes) == 1:
-            return 
-        solov2 = load_detector()
+            return
         box_masks = []
         for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
-            out = solov2.predict(image=[face_image.copy()])
+            out = self.solov2.predict(image=[face_image.copy()])
             box_masks.append(self.extract_mask(
                 np.zeros(face_image.shape[:2]),
                 out["segm"],
