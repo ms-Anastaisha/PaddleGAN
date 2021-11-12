@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from itertools import cycle
 import os
 import sys
 import cv2
@@ -28,7 +29,6 @@ root_path = os.path.split(cur_path)[0]
 sys.path.insert(0, os.path.dirname(root_path))
 
 import paddle
-import ppdet
 from ppgan.utils.download import get_path_from_url
 from ppgan.utils.animate import normalize_kp
 from ppgan.modules.keypoint_detector import KPDetector
@@ -48,13 +48,13 @@ from PaddleDetection.deploy.python.infer import *
 
 def load_detector():
     pred_config = PredictConfig(
-        "../../PaddleDetection/solov2_r50_enhance_coco"
+        "/home/user/paddle/PaddleGAN/PaddleDetection/solov2_r50_enhance_coco"
     )
     detector_func = "DetectorSOLOv2"
 
     detector = eval(detector_func)(
         pred_config,
-        "../../PaddleDetection/solov2_r50_enhance_coco",
+        "/home/user/paddle/PaddleGAN/PaddleDetection/solov2_r50_enhance_coco",
         device="GPU",
         run_mode="fluid",
         batch_size=1,
@@ -204,22 +204,30 @@ class FirstOrderPredictor(BasePredictor):
                             [frame for frame in out_frame],
                             fps=fps)
         else:
+            if audio.endswith(".mp3"):
+                audio_background = mp.AudioFileClip(audio)
+            elif audio.endswith(".mp4"):
+                audio_background = mp.VideoFileClip(audio)
+                audio_background = audio_background.audio 
             temp = 'tmp.mp4'
             imageio.mimsave(temp,
                             [frame for frame in out_frame],
                             fps=fps)
             videoclip_2 = mp.VideoFileClip(temp)
-            videoclip_2.set_audio(audio).write_videofile(os.path.join(self.output, self.filename),
+            if audio_background.duration > videoclip_2.duration: 
+                audio_background = audio_background.subclip(0, videoclip_2.duration)
+            videoclip_2.set_audio(audio_background).write_videofile(os.path.join(self.output, self.filename),
                                                             audio_codec="aac")
             os.remove(temp)
 
 
-    def run(self, source_image, driving_video, filename):
+    def run(self, source_image, driving_videos_paths, filename, audio):
         
         self.filename = filename
-        videoclip_1 = mp.VideoFileClip(driving_video)
-        audio = videoclip_1.audio
-        def get_prediction(face_image):
+        # videoclip_1 = mp.VideoFileClip(driving_video)
+        # audio = videoclip_1.audio
+        
+        def get_prediction(face_image, driving_video):
             predictions = self.make_animation(
                     face_image,
                     driving_video,
@@ -234,16 +242,23 @@ class FirstOrderPredictor(BasePredictor):
             _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
             source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
 
-        reader = imageio.get_reader(driving_video)
-        fps = reader.get_meta_data()['fps']
-       
-        try:
-            driving_video = [cv2.resize(im, (self.image_size, self.image_size)) / 255.0  for im in reader]
-        except RuntimeError:
-            print("Read driving video error!")
-            pass
-        reader.close()
+        if isinstance(driving_videos_paths, str):
+            driving_videos_paths = [driving_videos_paths]
 
+        driving_videos = []
+        for driving_video in driving_videos_paths:
+            reader = imageio.get_reader(driving_video)
+            fps = reader.get_meta_data()['fps']
+            
+            try:
+                driving_video = [cv2.resize(im, (self.image_size, self.image_size)) / 255.0  for im in reader]
+            except RuntimeError:
+                print("Read driving video error!")
+                pass
+            reader.close()
+
+            driving_videos.append(driving_video)
+        
         results = []
         start = time.time()
         bboxes, coords = self.extract_bbox(source_image.copy())
@@ -254,13 +269,21 @@ class FirstOrderPredictor(BasePredictor):
         bboxes = bboxes[indices]
         coords = coords[indices]
 
-        for rec in bboxes:
+        bbox2video = {}
+        if len(bboxes) <= len(driving_videos):
+            bbox2video = {i: i for i in range(len(bboxes))}
+        else:
+            pool = cycle(range(len(driving_videos)))
+            bbox2video = {i: next(pool) for i in range(len(bboxes))}
+
+        for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
             face_image = cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
-            predictions = get_prediction(face_image)
+            predictions = get_prediction(face_image, driving_videos[bbox2video[i]])
             results.append({'rec': rec, 'predict': [predictions[i] for i in range(predictions.shape[0])]})
             if len(bboxes) == 1 or not self.multi_person:
                 break
+        
         out_frame = []
 
         start = time.time()
@@ -268,37 +291,38 @@ class FirstOrderPredictor(BasePredictor):
         box_masks = self.extract_masks(bboxes, source_image)
         print("masks extraction: ", time.time()-start)
         start = time.time()
-
+        
         patch = np.zeros(source_image.shape).astype('uint8')
         mask = np.zeros(source_image.shape[:2]).astype('uint8')
-        for i in trange(len(driving_video)):
+        
+        for i in trange(max([len(i) for i in driving_videos])):
             frame = source_image.copy()
-            # patch = np.zeros(frame.shape).astype('uint8')
-            # mask = np.zeros(frame.shape[:2]).astype('uint8')
+
             for j, result  in enumerate(results):
                 x1, y1, x2, y2, _ = result['rec']
-
-                out = result['predict'][i]
-                out = cv2.resize(out.astype(np.uint8), (x2-x1, y2-y1))
+                
+                if i >= len(result['predict']):
+                    pass
+                else:
+                    out = result['predict'][i]
+                    out = cv2.resize(out.astype(np.uint8), (x2-x1, y2-y1))
         
-                if len(results) == 1:
-                    frame[y1:y2, x1:x2] = out
-                    break
-                else: 
-                    #patch = np.zeros(frame.shape).astype('uint8')
-                    patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)]*3)
-                    
-                    #mask = np.zeros(frame.shape[:2]).astype('uint8')
-                    mask[y1:y2, x1:x2] = box_masks[j]
-                frame = cv2.copyTo(patch, mask, frame)
+                    if len(results) == 1:
+                        frame[y1:y2, x1:x2] = out
+                        break
+                    else: 
+                        patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)]*3)
+                        
+                        mask[y1:y2, x1:x2] = box_masks[j]
+                    frame = cv2.copyTo(patch, mask, frame)
              
             out_frame.append(frame)
             patch[:, :, :] = 0
-            mask[:, :] = 0          
+            mask[:, :] = 0            
 
         print("video stitching", time.time() - start)
         start = time.time()
-        self.write_with_audio(audio, out_frame, fps)
+        self.write_with_audio(None, out_frame, fps)
         print("video writing", time.time() - start)
 
 
