@@ -17,9 +17,10 @@ args = {
     "image_size": 256,
     "batch_size": 30,
     "face_enhancement": False,
-    "gfpgan_model_path": "/home/user/paddle/PaddleGAN/experiments/pretrained_models/GFPGANCleanv1-NoCE-C2.pth",
+    "gfpgan_model_path": None, #"/home/user/paddle/PaddleGAN/experiments/pretrained_models/GFPGANCleanv1-NoCE-C2.pth",
     "mobile_net": False,
-    "preprocessing": True
+    "preprocessing": True,
+    "solov_path": "/home/user/paddle/PaddleGAN/PaddleDetection/solov2_r50_enhance_coco"
 }
 resources = {
     "source_image": [#"/home/user/paddle/PaddleGAN/data/selfie.jpeg", 
