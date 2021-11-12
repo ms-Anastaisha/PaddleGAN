@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from itertools import cycle
 import os
 import sys
 import cv2
@@ -214,29 +215,61 @@ class FirstOrderPredictor(BasePredictor):
                 os.path.join(self.output, self.filename), audio_codec="aac"
             )
             os.remove(temp)
-
-    def run(self, source_image, driving_video, filename):
+    def run(self, source_image, driving_videos_paths, filename):
 
         self.filename = filename
-        videoclip_1 = mp.VideoFileClip(driving_video)
-        audio = videoclip_1.audio
-        print(audio)
+        audio = None
         source_image = self.read_img(source_image)
-        reader = imageio.get_reader(driving_video)
-        fps = reader.get_meta_data()["fps"]
+        if isinstance(driving_videos_paths, str):
+            driving_videos_paths = [driving_videos_paths]
 
-        try:
-            driving_video = [
-                cv2.resize(im, (self.image_size, self.image_size)) / 255.0
-                for im in reader
-            ]
-        except RuntimeError:
-            print("Read driving video error!")
-            pass
-        reader.close()
+        driving_videos = []
+        for driving_video in driving_videos_paths:
+            reader = imageio.get_reader(driving_video)
+            fps = reader.get_meta_data()['fps']
+            
+            try:
+                driving_video = [cv2.resize(im, (self.image_size, self.image_size)) / 255.0  for im in reader]
+            except RuntimeError:
+                print("Read driving video error!")
+                pass
+            reader.close()
 
+            driving_videos.append(driving_video)
+        
+        start = time.time()
+        bboxes, coords = self.extract_bbox(source_image.copy())
+        print("extract bboxes", time.time() - start)
+        print(str(len(bboxes)) + " persons have been detected")
+        areas = [x[4] for x in bboxes]
+        indices = np.argsort(areas)
+        bboxes = bboxes[indices[::-1]]
+        coords = coords[indices[::-1]]
 
-        def get_prediction(face_image):
+        original_shape = source_image.shape[:2]
+        if self.gfpganer:
+            _, _, source_image = self.gfpganer.enhance(
+                cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR)
+            )
+            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+
+        bboxes[:, :4] = scale_bboxes(
+            original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
+        ).round()
+        for i, c in enumerate(coords):
+            coords[i] = scale_coords(
+                original_shape, np.array(c).astype(np.float64), source_image.shape
+            ).round()
+            coords[i] = list(coords[i])
+
+        bbox2video = {}
+        if len(bboxes) <= len(driving_videos):
+            bbox2video = {i: i for i in range(len(bboxes))}
+        else:
+            pool = cycle(range(len(driving_videos)))
+            bbox2video = {i: next(pool) for i in range(len(bboxes))}
+
+        def get_prediction(face_image, driving_video):
             predictions = self.make_animation(
                 face_image,
                 driving_video,
@@ -257,7 +290,7 @@ class FirstOrderPredictor(BasePredictor):
             face_image = (
                     cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
                 )
-            predictions = get_prediction(face_image)
+            predictions = get_prediction(face_image, driving_videos[bbox2video[0]])
             
             results.append(
                     {
@@ -295,7 +328,7 @@ class FirstOrderPredictor(BasePredictor):
                 face_image = (
                         cv2.resize(face_image_padded, (self.image_size, self.image_size)) / 255.0
                     )
-                predictions = get_prediction(face_image)
+                predictions = get_prediction(face_image, driving_videos[bbox2video[i]])
                     
                 results.append(
                         {
@@ -312,79 +345,60 @@ class FirstOrderPredictor(BasePredictor):
                     )
             out_frame = []
 
-            # start = time.time()
+          
 
-            # if len(results) > 1:
-            #     box_masks = self.extract_masks(results, coords, source_image)
-            #     print("masks extraction: ", time.time() - start)
+            if len(results) > 1:
+                box_masks = self.extract_masks(results, coords, source_image)
+                
 
             patch = np.zeros(source_image.shape).astype("uint8")
             mask = np.zeros(source_image.shape[:2]).astype("uint8")
-            for i in trange(len(driving_video)):
+            #box_mask = np.zeros(source_image.shape[:2]).astype("uint8")
+            for i in trange(max([len(i) for i in driving_videos])):
                 frame = source_image.copy()
                 # patch = np.zeros(frame.shape).astype('uint8')
                 # mask = np.zeros(frame.shape[:2]).astype('uint8')
                 for j, result in enumerate(results):
                     x1, y1, x2, y2 = result["adjust_bbox"]
+                    if i >= len(result['predict']):
+                        pass
+                    else:
+                        out = result["predict"][i].astype(np.uint8)
+                        #out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
+                        # out = out.astype(np.uint8)
+                        center_ellipse = result["center_ellipse"]
+                        axesLength = result["axesLength"]
+                            # patch = np.zeros(frame.shape).astype('uint8')
+                            #patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
 
-                    out = result["predict"][i].astype(np.uint8)
-                    #out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
-                    # out = out.astype(np.uint8)
-                    center_ellipse = result["center_ellipse"]
-                    axesLength = result["axesLength"]
-                        # patch = np.zeros(frame.shape).astype('uint8')
-                        #patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
-
-                        # mask = np.zeros(frame.shape[:2]).astype('uint8')
-                        # mask[y1:y2, x1:x2] = box_masks[j]
+                            # mask = np.zeros(frame.shape[:2]).astype('uint8')
                         
-                    mask[:, :] = 0
-                    cv2.ellipse(mask, center_ellipse, axesLength, 90, 0, 360, (255,255,255), -1)
-                    patch_mask = patch[y1:y2, x1:x2]
-                    patch[y1:y2, x1:x2][patch_mask == 0] = (out  * np.dstack([(mask[y1:y2, x1:x2] > 0)] * 3))[patch_mask == 0] 
-                    frame = cv2.copyTo(patch, mask, frame)
+                            
+                        
+                        #cv2.ellipse(mask, center_ellipse, axesLength, 90, 0, 360, (255,255,255), -1)
+                        mask[y1:y2, x1:x2] = box_masks[j]
+                        patch_mask = patch[y1:y2, x1:x2]
+                        
+                        # np.dstack([(mask[y1:y2, x1:x2] > 0)] * 3)
+                        patch[y1:y2, x1:x2][patch_mask == 0] = (out  * np.dstack([(box_masks[j] > 0)] * 3))[patch_mask == 0] 
+                        # cv2.imshow("", patch)
+                        # cv2.waitKey(2000)
 
-                out_frame.append(frame)
-                patch[:, :, :] = 0
+                        frame = cv2.copyTo(patch, mask, frame)
+
+                    out_frame.append(frame)
+                    patch[:, :, :] = 0
+                    mask[:, :] = 0
             return out_frame
 
-        
-        # if self.gfpganer:
-        #     _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
-        #     source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
-
-        start = time.time()
-        bboxes, coords = self.extract_bbox(source_image.copy())
-        print("extract bboxes", time.time() - start)
-        print(str(len(bboxes)) + " persons have been detected")
-        areas = [x[4] for x in bboxes]
-        indices = np.argsort(areas)
-        bboxes = bboxes[indices[::-1]]
-        coords = coords[indices[::-1]]
-
-        original_shape = source_image.shape[:2]
-        if self.gfpganer:
-            _, _, source_image = self.gfpganer.enhance(
-                cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR)
-            )
-            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
-
-        bboxes[:, :4] = scale_bboxes(
-            original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
-        ).round()
-        for i, c in enumerate(coords):
-            coords[i] = scale_coords(
-                original_shape, np.array(c).astype(np.float64), source_image.shape
-            ).round()
-            coords[i] = list(coords[i])
         if len(bboxes) == 1 or not self.multi_person:
             out_frame = run_one(source_image, bboxes[0])
         else:
             out_frame = run_multi(source_image, bboxes)
             
-        print("video stitching", time.time() - start)
+        
         start = time.time()
-        self.write_with_audio(audio, out_frame, fps)
+        self.write_with_audio(None, out_frame, fps)
         print("video writing", time.time() - start)
 
     def load_checkpoints(self, config, checkpoint_path):
@@ -486,16 +500,24 @@ class FirstOrderPredictor(BasePredictor):
             face_model = FaceParser()
         box_masks = []
         frame = source_image.copy()
-        polygons = [polygon2ellipsemask(coord, frame.shape[:2]) for coord in coords]
+        # polygons = [polygon2ellipsemask(coord, frame.shape[:2]) for coord in coords]
         for i in tqdm(range(0, len(results), 2)):
             x1, y1, x2, y2 = results[i]["adjust_bbox"]
+            center_ellipse1 = results[i]["center_ellipse"]
+            axesLength1 = results[i]["axesLength"]
+            ellipse_mask = np.zeros(frame.shape)
+            ellipse_mask = cv2.ellipse(ellipse_mask, center_ellipse1, axesLength1, 90, 0, 360, [255, 255, 255], -1)
             if i + 1 < len(results):
                 x11, y11, x21, y21 = results[i + 1]["adjust_bbox"]
-                width, height = max(x2 - x1, x21 - x11), max(y2 - y1, y21 - y11)
+                center_ellipse2 = results[i+1]["center_ellipse"]
+                axesLength2 = results[i+1]["axesLength"]
+                width, height = max(axesLength1[0], axesLength2[0]), max(axesLength1[1], axesLength2[1])
+                ellipse_mask2 = np.zeros(frame.shape)
+                ellipse_mask2 = cv2.ellipse(ellipse_mask2, center_ellipse2, axesLength2, 90, 0, 360, [255, 255, 255], -1) 
                 mask_image = cv2.hconcat(
                     [
-                        cv2.resize(frame[y1:y2, x1:x2], (width, height)),
-                        cv2.resize(frame[y11:y21, x11:x21], (width, height)),
+                        cv2.resize(frame[y1:y2, x1:x2]*(ellipse_mask[y1:y2, x1:x2] > 0), (width*2, height*2)),
+                        cv2.resize(frame[y11:y21, x11:x21]*(ellipse_mask2[y11:y21, x11:x21] > 0), (width*2, height*2)),
                     ]
                 )
                 h, w = mask_image.shape[:2]
@@ -507,11 +529,16 @@ class FirstOrderPredictor(BasePredictor):
                     box_mask[box_mask != 0] = 1
                 else:
                     box_mask = cv2.resize(face_model(mask_image), (w, h))
+                ### masks 
+                    box_masks.append(cv2.resize(box_mask[:, :w//2], (x2-x1, y2-y1)))
+                    box_masks.append(cv2.resize(box_mask[:, w//2:], (x21-x11, y21-y11)))
+                
                 ### masks + detections
                 # box_masks.append(cv2.bitwise_and(cv2.resize(box_mask[:, :w//2], (x2-x1, y2-y1)),
                 #                                polygon2mask(coords[i], frame.shape[:2])[y1:y2, x1:x2]))
                 # box_masks.append(cv2.bitwise_and(cv2.resize(box_mask[:, w//2:], (x21-x11, y21-y11)),
                 #                                polygon2mask(coords[i+1], frame.shape[:2])[y11:y21, x11:x21]))
+                
                 ### masks + ellipse detections
                 # box_masks.append(
                 #     cv2.bitwise_and(
@@ -527,26 +554,32 @@ class FirstOrderPredictor(BasePredictor):
                 # )
 
                 ### just ellipse detections
-                box_masks.append(polygons[i][y1:y2, x1:x2])
-                box_masks.append(polygons[i+1][y11:y21, x11:x21])
+                # box_masks.append(polygons[i][y1:y2, x1:x2])
+                # box_masks.append(polygons[i+1][y11:y21, x11:x21])
             else:
+
+
                 if model_type == "face_parser":
                     box_mask = face_model.parse(
-                        cv2.resize(frame[y1:y2, x1:x2], (512, 512)).astype(np.float32)
+                        cv2.resize(frame[y1:y2, x1:x2]*(ellipse_mask[y1:y2, x1:x2] > 0), (512, 512)).astype(np.float32)
                     )
                     box_mask = cv2.resize(
                         np.array(box_mask).astype("uint8"), (x2 - x1, y2 - y1)
                     )
                     box_mask[box_mask != 0] = 1
                 else:
-                    box_mask = face_model(frame[y1:y2, x1:x2])
+                    box_mask = face_model(frame[y1:y2, x1:x2]*(ellipse_mask[y1:y2, x1:x2] > 0))
                 ### just ellipse detections
-                box_masks.append(polygons[i][y1:y2, x1:x2])
+                # box_masks.append(polygons[i][y1:y2, x1:x2])
+                
                 ### masks + ellipse detections
-                # box_masks.append(cv2.bitwise_and(box_mask, polygons[i][y1:y2, x1:x2]))
+                #box_masks.append(cv2.bitwise_and(box_mask, polygons[i][y1:y2, x1:x2]))
+                
                 ### masks + detections
                 # box_masks.append(cv2.bitwise_and(cv2.resize(box_mask, (x2-x1, y2-y1)),
-                #                                polygon2mask(coords[i], frame.shape[:2])[y1:y2, x1:x2]))
+                #                               polygon2mask(coords[i], frame.shape[:2])[y1:y2, x1:x2]))
+                ### masks
+                box_masks.append(cv2.resize(box_mask, (x2-x1, y2-y1)))
         return box_masks
 
 
@@ -619,7 +652,7 @@ def adjust_detection(detector, image, bbox, pad):
     x11 = max(0, cx - int(0.7 * bw))
     y21 = min(h, cy + int(bh*0.9))
     x21 = min(w, cx + int(0.7 * bw))
-    return [x11, y11, x21, y21], (cx, cy), (int((y21-y11)*0.5), int((x21-x11)*0.45))
+    return [x11, y11, x21, y21], (cx, cy), (int((y21-y11)*0.5), int((x21-x11)*0.4))
 
 
 def move_ellipses(ellipses):
