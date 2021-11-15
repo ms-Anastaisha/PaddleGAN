@@ -398,29 +398,27 @@ class FirstOrderPredictor(BasePredictor):
         for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
             out = self.solov2.predict(image=[face_image.copy()])
-            box_masks.append(self.extract_mask(
-                np.zeros(face_image.shape[:2]),
-                out["segm"],
-                out["score"]
-            ))
+            box_masks.append(self.extract_mask(out))
         return box_masks
 
 
     def extract_mask(
         self,
-        im,
-        np_segms,
-        np_score,
+        result,
         threshold=0.4,
     ):
-        im = np.array(im).astype('float32')
-        np_segms = np_segms.astype(np.uint8)
-        for i in range(np_segms.shape[0]):
-            mask, score = np_segms[i], np_score[i]
-            if score < threshold:
-                continue
+        shape = result["segm"][0].shape
 
-            idx = np.nonzero(mask)
-            im[idx] = 1
+        idx = result["label"] == 0
+        result["segm"] = result["segm"][idx]
+
+        idx = result["score"][idx] >= 0.3
+        result["segm"] = result["segm"][idx]
         
-        return im
+        if result["segm"].shape[0] > 0:
+            mask_idx = np.argmax(result["segm"].sum(axis=2).sum(axis=1))
+            mask = result["segm"][mask_idx]
+        else:
+            mask = np.zeros(shape)
+        
+        return mask
