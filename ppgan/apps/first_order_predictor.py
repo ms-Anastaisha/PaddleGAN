@@ -207,11 +207,12 @@ class FirstOrderPredictor(BasePredictor):
                             [frame for frame in out_frame],
                             fps=fps)
         else:
-            if audio.endswith(".mp3"):
-                audio_background = mp.AudioFileClip(audio)
-            elif audio.endswith(".mp4"):
-                audio_background = mp.VideoFileClip(audio)
-                audio_background = audio_background.audio 
+            audio_background = mp.AudioFileClip(audio)
+            #if audio.endswith(".mp3"):
+            #    audio_background = mp.AudioFileClip(audio)
+            #elif audio.endswith(".mp4"):
+            #    audio_background = mp.VideoFileClip(audio)
+            #    audio_background = audio_background.audio 
             temp = 'tmp.mp4'
             imageio.mimsave(temp,
                             [frame for frame in out_frame],
