@@ -22,6 +22,7 @@ import imageio
 import time
 import numpy as np
 from tqdm import tqdm, trange
+from pathlib import Path
 
 import sys
 cur_path = os.path.abspath(os.path.dirname(__file__))
@@ -244,11 +245,26 @@ class FirstOrderPredictor(BasePredictor):
             _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
             source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
 
+
+        results = []
+        start = time.time()
+        bboxes = self.extract_bbox(source_image.copy())
+        # bboxes, coords = self.extract_bbox(source_image.copy())
+        print("extract bboxes", time.time() - start)
+        print(str(len(bboxes)) + " persons have been detected")
+        areas = [x[4] for x in bboxes]
+        indices = np.argsort(areas)
+        bboxes = bboxes[indices]
+        # coords = coords[indices]
+        
         if isinstance(driving_videos_paths, str):
-            driving_videos_paths = [driving_videos_paths]
+            if Path(driving_videos_paths).is_file():
+                driving_videos_paths = [driving_videos_paths]
+            elif Path(driving_videos_paths).is_dir():
+                driving_videos_paths = [str(filepath.absolute()) for filepath in Path(driving_videos_paths).glob('**/*.mp4')]
 
         driving_videos = []
-        for driving_video in driving_videos_paths:
+        for driving_video in driving_videos_paths[:len(bboxes)]:
             reader = imageio.get_reader(driving_video)
             fps = reader.get_meta_data()['fps']
             
@@ -260,17 +276,6 @@ class FirstOrderPredictor(BasePredictor):
             reader.close()
 
             driving_videos.append(driving_video)
-        
-        results = []
-        start = time.time()
-        bboxes = self.extract_bbox(source_image.copy())
-        # bboxes, coords = self.extract_bbox(source_image.copy())
-        print("extract bboxes", time.time() - start)
-        print(str(len(bboxes)) + " persons have been detected")
-        areas = [x[4] for x in bboxes]
-        indices = np.argsort(areas)
-        bboxes = bboxes[indices]
-        # coords = coords[indices]
 
         bbox2video = {}
         if len(bboxes) <= len(driving_videos):
