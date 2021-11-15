@@ -87,7 +87,7 @@ def upscale_detection(detection, max_coords):
     bh, bw = detection[3] - detection[1], detection[2] - detection[0]
     min_x1, min_y1, max_x2, max_y2 = max_coords
     ratio_y1, ratio_y2 = 0.95 + bh / max_y2 / 2, 0.65 + bh / max_y2 / 2
-    ratio_x = 0.95 + bw / max_x2 / 2  
+    ratio_x = 0.99 + bw / max_x2 / 2  
     cy, cx = detection[1] + int(bh / 2), detection[0] + int(bw / 2)
     y1, x1 = max(min_y1, cy - int(bh * ratio_y1)), max(min_x1, cx - int(bw * ratio_x))
     y2, x2 = min(max_y2, cy + int(bh * ratio_y2)), min(max_x2, cx + int(bw * ratio_x))
