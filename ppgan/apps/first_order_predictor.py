@@ -330,7 +330,7 @@ class FirstOrderPredictor(BasePredictor):
 
         print("video stitching", time.time() - start)
         start = time.time()
-        self.write_with_audio(None, out_frame, fps)
+        self.write_with_audio(audio, out_frame, fps)
         print("video writing", time.time() - start)
 
 
