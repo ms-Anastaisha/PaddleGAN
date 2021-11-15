@@ -36,7 +36,7 @@ from ppgan.models.generators.occlusion_aware import OcclusionAwareGenerator
 from ppgan.faceutils import face_detection
 from ppgan.faceutils.mask.face_parser import FaceParser
 from ppgan.faceutils.face_segmentation.face_seg import FaceSeg
-from ppgan.faceutils.face_detection.detection_utils import union_results, polygon2mask, polygon2ellipsemask
+from ppgan.faceutils.face_detection.detection_utils import union_results, polygon2mask, polygon2ellipsemask, upscale_detections
 from gfpgan import GFPGANer
 import moviepy.editor as mp
 
@@ -176,7 +176,7 @@ class FirstOrderPredictor(BasePredictor):
             #                              arch = 'clean',
             #                              channel_multiplier = 2,
             #                              bg_upsampler = None)
-        self.detection_func = union_results
+        self.detection_func = upscale_detections
         self.preprocessing = preprocessing
         self.face_alignment = face_align
      
@@ -263,13 +263,14 @@ class FirstOrderPredictor(BasePredictor):
         
         results = []
         start = time.time()
-        bboxes, coords = self.extract_bbox(source_image.copy())
+        bboxes = self.extract_bbox(source_image.copy())
+        # bboxes, coords = self.extract_bbox(source_image.copy())
         print("extract bboxes", time.time() - start)
         print(str(len(bboxes)) + " persons have been detected")
         areas = [x[4] for x in bboxes]
         indices = np.argsort(areas)
         bboxes = bboxes[indices]
-        coords = coords[indices]
+        # coords = coords[indices]
 
         bbox2video = {}
         if len(bboxes) <= len(driving_videos):
@@ -404,6 +405,7 @@ class FirstOrderPredictor(BasePredictor):
                 begin_idx += frame_num
         return np.concatenate(predictions)
 
+
     def extract_bbox(self, image):
         detector = face_detection.FaceAlignment(
             face_detection.LandmarksType._2D,
@@ -412,8 +414,15 @@ class FirstOrderPredictor(BasePredictor):
 
         # frame = [image]
         predictions = detector.get_detections_for_image(np.array(image))
-        result, coords = self.detection_func(image, predictions)
-        return np.array(result), np.array(coords)
+        predictions = list(filter(lambda x: ((x[3]-x[1])*(x[2]-x[0])) > 1000, predictions))
+        # result, coords = self.detection_func(image, predictions)
+
+        h, w, _ = image.shape
+        predictions = self.detection_func(predictions, (0, 0, w, h))
+        # predictions = list(map(lambda x: compute_aspect_preserved_bbox(x, image.shape[:2], 0.3), predictions))
+        
+        # return np.array(result), np.array(coords)
+        return np.array(predictions)
 
 
     def extract_masks(self, bboxes, source_image):
@@ -447,3 +456,4 @@ class FirstOrderPredictor(BasePredictor):
             mask = np.zeros(shape)
         
         return mask
+        
