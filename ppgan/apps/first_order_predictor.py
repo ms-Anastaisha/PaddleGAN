@@ -213,7 +213,7 @@ class FirstOrderPredictor(BasePredictor):
             else:
                 image = Image.fromarray(image)
             image.paste(border, mask=border)
-            return image
+            return np.asarray(image)
         elif ssize[1] is not None:
             image =  imutils.resize(image, height=ssize[1])
             if image.shape[1] > border.size[0]:
@@ -222,12 +222,12 @@ class FirstOrderPredictor(BasePredictor):
             else:
                 image = Image.fromarray(image)
             image.paste(border, mask=border)
-            return image
+            return np.asarray(image)
         else:
             image = cv2.resize(image, ssize, cv2.INTER_AREA)
             image = Image.fromarray(image)
             image.paste(border, mask=border)
-            return image
+            return np.asarray(image)
 
     def decorate(self, frames, borders):
         h, w, _ = frames[0].shape
