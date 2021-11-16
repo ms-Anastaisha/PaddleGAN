@@ -38,6 +38,8 @@ from ppgan.faceutils import face_detection
 from ppgan.faceutils.mask.face_parser import FaceParser
 from ppgan.faceutils.face_segmentation.face_seg import FaceSeg
 from ppgan.faceutils.face_detection.detection_utils import union_results, polygon2mask, polygon2ellipsemask, upscale_detections
+from ppgan.faceutils.face_classification.face_classification import FaceClassification
+
 from gfpgan import GFPGANer
 import moviepy.editor as mp
 
@@ -150,7 +152,7 @@ class FirstOrderPredictor(BasePredictor):
         self.generator, self.kp_detector = self.load_checkpoints(
             self.cfg, self.weight_path)
         self.solov2 = load_detector(solov_path)
-      
+        self.face_classifier = FaceClassification()
         
         # from realesrgan import RealESRGANer
         # bg_upsampler = RealESRGANer(
@@ -292,7 +294,7 @@ class FirstOrderPredictor(BasePredictor):
             results.append({'rec': rec, 'predict': [predictions[i] for i in range(predictions.shape[0])]})
             if len(bboxes) == 1 or not self.multi_person:
                 break
-        
+
         out_frame = []
 
         start = time.time()
@@ -330,8 +332,20 @@ class FirstOrderPredictor(BasePredictor):
             mask[:, :] = 0            
 
         print("video stitching", time.time() - start)
+
+        if len(bboxes) == 1:
+            classification = self.classify_face(source_image.copy()[bboxes[0][1]:bboxes[0][3], bboxes[0][0]:bboxes[0][2]])
+            if (classification[1] <= 2) and (audio["kid"] is not None):
+                audio_path = audio["kid"]
+            elif (classification[0] == 0) and (audio["male"] is not None):
+                audio_path = audio["male"]
+            elif (classification[0] == 1) and (audio["female"] is not None):
+                audio_path = audio["female"]
+        else:
+            audio_path = audio["group"]
+
         start = time.time()
-        self.write_with_audio(audio, out_frame, fps)
+        self.write_with_audio(audio_path, out_frame, fps)
         print("video writing", time.time() - start)
 
 
@@ -430,6 +444,9 @@ class FirstOrderPredictor(BasePredictor):
         # return np.array(result), np.array(coords)
         return np.array(predictions)
 
+    def classify_face(self, image):
+        classification = self.face_classifier.classify_image(image.copy())
+        return classification
 
     def extract_masks(self, bboxes, source_image):
         if len(bboxes) == 1:
