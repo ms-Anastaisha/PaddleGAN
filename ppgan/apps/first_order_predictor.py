@@ -498,9 +498,6 @@ class FirstOrderPredictor(BasePredictor):
             for i, mask in enumerate(result["segm"]):
                 if mask[center[0], center[1]]:
                     mask_idx = i
-                print(center)
-                print(mask.shape)
-                print(mask[center[0], center[1]])
             mask = result["segm"][mask_idx]
         else:
             mask = np.zeros(shape)
