@@ -253,7 +253,7 @@ class FirstOrderPredictor(BasePredictor):
             out_frame = self.decorate(out_frame, borders)
         if audio is None:
             imageio.mimsave(os.path.join(self.output, self.filename),
-                            [frame for frame in out_frame],
+                            [np.array(frame) for frame in out_frame],
                             fps=fps)
         else:
             if audio.endswith(".mp3"):
@@ -263,7 +263,7 @@ class FirstOrderPredictor(BasePredictor):
                 audio_background = audio_background.audio 
             temp = 'tmp.mp4'
             imageio.mimsave(temp,
-                           [frame for frame in out_frame],
+                           [np.array(frame) for frame in out_frame],
                             fps=fps)
             videoclip_2 = mp.VideoFileClip(temp)
             if audio_background.duration > videoclip_2.duration: 
