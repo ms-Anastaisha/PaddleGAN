@@ -366,20 +366,6 @@ class FirstOrderPredictor(BasePredictor):
                     out = result['predict'][i]
                     out = cv2.resize(out.astype(np.uint8), (x2-x1, y2-y1))
         
-<<<<<<< HEAD
-                if len(results) == 1:
-                    frame[y1:y2, x1:x2] = out
-                    break
-                else: 
-                    #patch = np.zeros(frame.shape).astype('uint8')
-                    patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)]*3)
-                    
-                    #mask = np.zeros(frame.shape[:2]).astype('uint8')
-                    mask[y1:y2, x1:x2] = box_masks[j]
-
-                frame = cv2.copyTo(patch, mask, frame)
-
-=======
                     if len(results) == 1:
                         frame[y1:y2, x1:x2] = out
                         break
@@ -389,18 +375,13 @@ class FirstOrderPredictor(BasePredictor):
                         mask[y1:y2, x1:x2] = box_masks[j]
                     frame = cv2.copyTo(patch, mask, frame)
              
->>>>>>> solo2+multivideo
             out_frame.append(frame)
             patch[:, :, :] = 0
             mask[:, :] = 0            
 
         print("video stitching", time.time() - start)
         start = time.time()
-<<<<<<< HEAD
         self.write_with_audio(None, out_frame, fps, borders)
-=======
-        self.write_with_audio(audio, out_frame, fps)
->>>>>>> solo2+multivideo
         print("video writing", time.time() - start)
 
 
@@ -508,10 +489,6 @@ class FirstOrderPredictor(BasePredictor):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
             center = face_image.shape[0] // 2, face_image.shape[1] // 2
             out = self.solov2.predict(image=[face_image.copy()])
-<<<<<<< HEAD
-=======
-            center = face_image.shape[0] // 2, face_image.shape[1] // 2
->>>>>>> solo2+multivideo
             box_masks.append(self.extract_mask(out, center))
         return box_masks
 
@@ -519,11 +496,7 @@ class FirstOrderPredictor(BasePredictor):
     def extract_mask(
         self,
         result,
-<<<<<<< HEAD
         center, 
-=======
-        center,
->>>>>>> solo2+multivideo
         threshold=0.4,
     ):
         shape = result["segm"][0].shape
