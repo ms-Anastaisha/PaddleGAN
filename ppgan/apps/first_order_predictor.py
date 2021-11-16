@@ -41,6 +41,7 @@ from gfpgan import GFPGANer
 import moviepy.editor as mp
 
 from ppgan.apps.base_predictor import BasePredictor
+from PIL import Image
 
 sys.path.insert(0, "../../PaddleDetection/deploy/python")
 from PaddleDetection.deploy.python.infer import *
@@ -200,10 +201,48 @@ class FirstOrderPredictor(BasePredictor):
             img = cv2.resize(img, dim)
         return img
 
-    def write_with_audio(self, audio, out_frame, fps):
+
+    def _add_border(self, image, ssize, border):
+        image = cv2.resize(image, ssize)
+        if ssize[0] > border.size[0]:
+            pad = (ssize[0] - border.size[0]) // 2     
+            image = Image.fromarray(cv2.resize(image[:, pad:-pad], border.size))
+            image.paste(border, mask=border)
+            return image
+        if ssize[1] > border.size[1]:
+            pad = (ssize[1] - border.size[1]) // 2
+            image = Image.fromarray(cv2.resize(image[pad:-pad, :], border.size))
+            image.paste(border, mask=border)
+            return image
+        image = Image.fromarray(image)
+        image.paste(border, border)
+        return image
+
+    def decorate(self, frames, borders):
+        h, w, _ = frames[0].shape
+        if w > h:
+            border = Image.open(borders["landscape"])
+            desired_height, desired_width = border.size
+            r = desired_height / h
+            dim = (int(r * w), desired_height)
+        elif w < h:
+            border = Image.open(borders["portrait"])
+            desired_height, desired_width = border.size
+            r = desired_width / w
+            dim = (desired_width, int(r * h))
+        else:
+            border = Image.open(borders["square"])
+            desired_height, desired_width = border.size
+            dim = (desired_width, desired_height)
+        
+        return  [self._add_border(frame, dim, border) for frame in frames]
+
+    def write_with_audio(self, audio, out_frame, fps, borders=None):
+        if borders is not None:
+            out_frame = self.decorate(out_frame, borders)
         if audio is None:
             imageio.mimsave(os.path.join(self.output, self.filename),
-                            [frame for frame in out_frame],
+                            out_frame,
                             fps=fps)
         else:
             if audio.endswith(".mp3"):
@@ -213,7 +252,7 @@ class FirstOrderPredictor(BasePredictor):
                 audio_background = audio_background.audio 
             temp = 'tmp.mp4'
             imageio.mimsave(temp,
-                            [frame for frame in out_frame],
+                           out_frame,
                             fps=fps)
             videoclip_2 = mp.VideoFileClip(temp)
             if audio_background.duration > videoclip_2.duration: 
@@ -223,7 +262,8 @@ class FirstOrderPredictor(BasePredictor):
             os.remove(temp)
 
 
-    def run(self, source_image, driving_videos_paths, filename, audio):
+    def run(self, source_image, driving_videos_paths, filename, audio, borders=None):
+        
         
         self.filename = filename
         # videoclip_1 = mp.VideoFileClip(driving_video)
@@ -324,7 +364,7 @@ class FirstOrderPredictor(BasePredictor):
 
         print("video stitching", time.time() - start)
         start = time.time()
-        self.write_with_audio(None, out_frame, fps)
+        self.write_with_audio(None, out_frame, fps, borders)
         print("video writing", time.time() - start)
 
 
