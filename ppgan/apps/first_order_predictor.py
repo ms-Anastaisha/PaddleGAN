@@ -42,6 +42,7 @@ import moviepy.editor as mp
 
 from ppgan.apps.base_predictor import BasePredictor
 from PIL import Image
+import imutils
 
 sys.path.insert(0, "../../PaddleDetection/deploy/python")
 from PaddleDetection.deploy.python.infer import *
@@ -203,33 +204,42 @@ class FirstOrderPredictor(BasePredictor):
 
 
     def _add_border(self, image, ssize, border):
-        image = cv2.resize(image, ssize)
-        if ssize[0] > border.size[0]:
-            pad = (ssize[0] - border.size[0]) // 2     
-            image = Image.fromarray(cv2.resize(image[:, pad:-pad], border.size))
+        if ssize[0] is not None:
+            image = imutils.resize(image, width=ssize[0])
+            if image.shape[0] > border.size[1]:
+                pad = (image.shape[0] - border.size[1]) // 2 
+                image = Image.fromarray(image[pad:-pad,:])
+            else:
+                image = Image.fromarray(image)
             image.paste(border, mask=border)
             return image
-        if ssize[1] > border.size[1]:
-            pad = (ssize[1] - border.size[1]) // 2
-            image = Image.fromarray(cv2.resize(image[pad:-pad, :], border.size))
+        elif ssize[1] is not None:
+            image =  imutils.resize(image, height=ssize[1])
+            if image.shape[1] > border.size[0]:
+                pad = (image.shape[1] - border.size[0]) // 2
+                image = Image.fromarray(image[:, pad:-pad])
+            else:
+                image = Image.fromarray(image)
             image.paste(border, mask=border)
             return image
-        image = Image.fromarray(image)
-        image.paste(border, border)
-        return image
+        else:
+            image = cv2.resize(image, ssize, cv2.INTER_AREA)
+            image = Image.fromarray(image)
+            image.paste(border, mask=border)
+            return image
 
     def decorate(self, frames, borders):
         h, w, _ = frames[0].shape
-        if w > h:
+        if w > h + 10:
             border = Image.open(borders["landscape"])
-            desired_height, desired_width = border.size
-            r = desired_height / h
-            dim = (int(r * w), desired_height)
-        elif w < h:
+            desired_width, desired_height = border.size
+            #r = desired_height / float(h)
+            dim = (None, desired_height)
+        elif h > w+ 10:
             border = Image.open(borders["portrait"])
-            desired_height, desired_width = border.size
-            r = desired_width / w
-            dim = (desired_width, int(r * h))
+            desired_width, desired_height = border.size
+            #r = desired_width / float(w)
+            dim = (desired_width, None)
         else:
             border = Image.open(borders["square"])
             desired_height, desired_width = border.size
@@ -462,14 +472,16 @@ class FirstOrderPredictor(BasePredictor):
         box_masks = []
         for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
+            center = face_image.shape[0] // 2, face_image.shape[1] // 2
             out = self.solov2.predict(image=[face_image.copy()])
-            box_masks.append(self.extract_mask(out))
+            box_masks.append(self.extract_mask(out, center))
         return box_masks
 
 
     def extract_mask(
         self,
         result,
+        center, 
         threshold=0.4,
     ):
         shape = result["segm"][0].shape
@@ -481,7 +493,12 @@ class FirstOrderPredictor(BasePredictor):
         result["segm"] = result["segm"][idx]
         
         if result["segm"].shape[0] > 0:
-            mask_idx = np.argmax(result["segm"].sum(axis=2).sum(axis=1))
+            #mask_idx = np.argmax(result["segm"].sum(axis=2).sum(axis=1))
+            mask_idx = -1
+            for i, mask in enumerate(result["segm"]):
+                if mask[center[0], center[1]]:
+                    mask_idx = i
+                print(mask[center[0], center[1]])
             mask = result["segm"][mask_idx]
         else:
             mask = np.zeros(shape)
