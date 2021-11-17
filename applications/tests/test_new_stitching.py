@@ -39,7 +39,7 @@ resources = {
         "/home/user/paddle/PaddleGAN/data/jingle_bells_acapella_part.mp4", 
 
      ],
-    "audio": None
+    "audio": "/home/user/paddle/PaddleGAN/data/just_audio.mp4"
 }
 
 

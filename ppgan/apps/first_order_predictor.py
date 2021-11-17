@@ -201,6 +201,7 @@ class FirstOrderPredictor(BasePredictor):
             img = cv2.resize(img, dim)
         return img
 
+
     def write_with_audio(self, audio, out_frame, fps):
         if audio is None:
             imageio.mimsave(os.path.join(self.output, self.filename),
