@@ -231,12 +231,12 @@ class FirstOrderPredictor(BasePredictor):
 
     def decorate(self, frames, borders):
         h, w, _ = frames[0].shape
-        if w > h + 10:
+        if w > h + 20:
             border = Image.open(borders["landscape"])
             desired_width, desired_height = border.size
             #r = desired_height / float(h)
             dim = (None, desired_height)
-        elif h > w+ 10:
+        elif h > w+ 20:
             border = Image.open(borders["portrait"])
             desired_width, desired_height = border.size
             #r = desired_width / float(w)
