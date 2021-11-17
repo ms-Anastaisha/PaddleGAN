@@ -464,7 +464,11 @@ class FirstOrderPredictor(BasePredictor):
             if out["segm"][0].shape != face_image.shape[:2]:
                 out["segm"] = np.resize(out["segm"], (out["segm"].shape[0], *face_image.shape[:2]))
             center = face_image.shape[0] // 2, face_image.shape[1] // 2
-            box_masks.append(self.extract_mask(out, center))
+            mask = self.extract_mask(out, center)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 15))
+            mask = cv2.dilate(mask, kernel)
+            box_masks.append(mask)
+            # box_masks.append(self.extract_mask(out, center))
         return box_masks
 
 
