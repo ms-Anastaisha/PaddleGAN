@@ -210,11 +210,6 @@ class FirstOrderPredictor(BasePredictor):
                             fps=fps)
         else:
             audio_background = mp.AudioFileClip(audio)
-            #if audio.endswith(".mp3"):
-            #    audio_background = mp.AudioFileClip(audio)
-            #elif audio.endswith(".mp4"):
-            #    audio_background = mp.VideoFileClip(audio)
-            #    audio_background = audio_background.audio 
             temp = 'tmp.mp4'
             imageio.mimsave(temp,
                             [frame for frame in out_frame],
@@ -334,12 +329,12 @@ class FirstOrderPredictor(BasePredictor):
         print("video stitching", time.time() - start)
 
         if len(bboxes) == 1:
-            classification = self.classify_face(source_image.copy()[bboxes[0][1]:bboxes[0][3], bboxes[0][0]:bboxes[0][2]])
-            if (classification[1] <= 2) and (audio["kid"] is not None):
+            gender, age = self.classify_face(source_image.copy()[bboxes[0][1]:bboxes[0][3], bboxes[0][0]:bboxes[0][2]])
+            if (age <= 2) and (audio["kid"] is not None):
                 audio_path = audio["kid"]
-            elif (classification[0] == 0) and (audio["male"] is not None):
+            elif (gender == 0):
                 audio_path = audio["male"]
-            elif (classification[0] == 1) and (audio["female"] is not None):
+            elif (gender == 1):
                 audio_path = audio["female"]
         else:
             audio_path = audio["group"]
@@ -445,8 +440,8 @@ class FirstOrderPredictor(BasePredictor):
         return np.array(predictions)
 
     def classify_face(self, image):
-        classification = self.face_classifier.classify_image(image.copy())
-        return classification
+        gender, age = self.face_classifier.classify_image(image.copy())
+        return gender, age
 
     def extract_masks(self, bboxes, source_image):
         if len(bboxes) == 1:

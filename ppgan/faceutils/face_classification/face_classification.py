@@ -69,7 +69,7 @@ class FaceClassification():
         # 7 - '60-69'
         # 8 - '70+'
 
-        return (gender_pred, age_pred)
+        return gender_pred, age_pred
 
     def check_weights(self, weights: str):
         if Path(weights).exists():
