@@ -10,5 +10,4 @@ easydict
 munch
 natsort
 moviepy
-geopandas
 imutils

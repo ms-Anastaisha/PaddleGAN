@@ -37,7 +37,7 @@ from ppgan.models.generators.occlusion_aware import OcclusionAwareGenerator
 from ppgan.faceutils import face_detection
 from ppgan.faceutils.mask.face_parser import FaceParser
 from ppgan.faceutils.face_segmentation.face_seg import FaceSeg
-from ppgan.faceutils.face_detection.detection_utils import upscale_detections, scale_bboxes, scale_coords
+from ppgan.faceutils.face_detection.detection_utils import upscale_detections, scale_bboxes
 from gfpgan import GFPGANer
 import moviepy.editor as mp
 
