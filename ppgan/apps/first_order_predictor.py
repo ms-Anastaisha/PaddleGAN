@@ -265,7 +265,7 @@ class FirstOrderPredictor(BasePredictor):
         bboxes[:, :4] = scale_bboxes(
             original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
         ).round()
-       
+        
         if isinstance(driving_videos_paths, str):
             if Path(driving_videos_paths).is_file():
                 driving_videos_paths = [driving_videos_paths]
@@ -446,6 +446,8 @@ class FirstOrderPredictor(BasePredictor):
         for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
             out = self.solov2.predict(image=[face_image.copy()])
+            if out["segm"][0].shape != face_image.shape[:2]:
+                out["segm"] = np.resize(out["segm"], (out["segm"].shape[0], *face_image.shape[:2]))
             center = face_image.shape[0] // 2, face_image.shape[1] // 2
             box_masks.append(self.extract_mask(out, center))
         return box_masks
@@ -458,7 +460,7 @@ class FirstOrderPredictor(BasePredictor):
         threshold=0.4,
     ):
         shape = result["segm"][0].shape
-
+        
         idx = result["label"] == 0
         result["segm"] = result["segm"][idx]
 
