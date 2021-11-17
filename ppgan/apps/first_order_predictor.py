@@ -335,17 +335,20 @@ class FirstOrderPredictor(BasePredictor):
             mask[:, :] = 0            
 
         print("video stitching", time.time() - start)
-
-        if len(bboxes) == 1:
-            gender, age = self.classify_face(source_image.copy()[bboxes[0][1]:bboxes[0][3], bboxes[0][0]:bboxes[0][2]])
-            if (age <= 2) and (audio["kid"] is not None):
-                audio_path = audio["kid"]
-            elif (gender == 0):
-                audio_path = audio["male"]
-            elif (gender == 1):
-                audio_path = audio["female"]
+           
+        if (audio is None) or isinstance(audio, str):
+            audio_path = audio
         else:
-            audio_path = audio["group"]
+            if len(bboxes) == 1:
+                gender, age = self.classify_face(source_image.copy()[bboxes[0][1]:bboxes[0][3], bboxes[0][0]:bboxes[0][2]])
+                if (age <= 2) and (audio["kid"] is not None):
+                    audio_path = audio["kid"]
+                elif (gender == 0):
+                    audio_path = audio["male"]
+                elif (gender == 1):
+                    audio_path = audio["female"]
+            else:
+                audio_path = audio["group"]
 
         start = time.time()
         self.write_with_audio(audio_path, out_frame, fps)
