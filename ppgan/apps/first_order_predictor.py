@@ -243,10 +243,7 @@ class FirstOrderPredictor(BasePredictor):
             return predictions
 
         source_image = self.read_img(source_image)
-        if self.gfpganer:
-            _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
-            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
-
+      
 
         results = []
         start = time.time()
@@ -258,6 +255,11 @@ class FirstOrderPredictor(BasePredictor):
         indices = np.argsort(areas)
         bboxes = bboxes[indices]
         # coords = coords[indices]
+
+        if self.gfpganer:
+            _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
+            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+
         
         if isinstance(driving_videos_paths, str):
             if Path(driving_videos_paths).is_file():
