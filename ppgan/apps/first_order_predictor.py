@@ -37,7 +37,7 @@ from ppgan.models.generators.occlusion_aware import OcclusionAwareGenerator
 from ppgan.faceutils import face_detection
 from ppgan.faceutils.mask.face_parser import FaceParser
 from ppgan.faceutils.face_segmentation.face_seg import FaceSeg
-from ppgan.faceutils.face_detection.detection_utils import union_results, polygon2mask, polygon2ellipsemask, upscale_detections
+from ppgan.faceutils.face_detection.detection_utils import upscale_detections, scale_bboxes, scale_coords
 from gfpgan import GFPGANer
 import moviepy.editor as mp
 
@@ -293,7 +293,6 @@ class FirstOrderPredictor(BasePredictor):
 
         source_image = self.read_img(source_image)
       
-
         results = []
         start = time.time()
         bboxes = self.extract_bbox(source_image.copy())
@@ -305,11 +304,17 @@ class FirstOrderPredictor(BasePredictor):
         bboxes = bboxes[indices]
         # coords = coords[indices]
 
+        original_shape = source_image.shape[:2]
         if self.gfpganer:
-            _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
+            _, _, source_image = self.gfpganer.enhance(
+                cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR)
+            )
             source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
 
-        
+        bboxes[:, :4] = scale_bboxes(
+            original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
+        ).round()
+       
         if isinstance(driving_videos_paths, str):
             if Path(driving_videos_paths).is_file():
                 driving_videos_paths = [driving_videos_paths]
