@@ -37,7 +37,7 @@ from ppgan.models.generators.occlusion_aware import OcclusionAwareGenerator
 from ppgan.faceutils import face_detection
 from ppgan.faceutils.mask.face_parser import FaceParser
 from ppgan.faceutils.face_segmentation.face_seg import FaceSeg
-from ppgan.faceutils.face_detection.detection_utils import union_results, polygon2mask, polygon2ellipsemask, upscale_detections
+from ppgan.faceutils.face_detection.detection_utils import upscale_detections, scale_bboxes
 from ppgan.faceutils.face_classification.face_classification import FaceClassification
 
 from gfpgan import GFPGANer
@@ -203,6 +203,7 @@ class FirstOrderPredictor(BasePredictor):
             img = cv2.resize(img, dim)
         return img
 
+
     def write_with_audio(self, audio, out_frame, fps):
         if audio is None:
             imageio.mimsave(os.path.join(self.output, self.filename),
@@ -239,11 +240,7 @@ class FirstOrderPredictor(BasePredictor):
             return predictions
 
         source_image = self.read_img(source_image)
-        if self.gfpganer:
-            _, _, source_image = self.gfpganer.enhance(cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR))
-            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
-
-
+      
         results = []
         start = time.time()
         bboxes = self.extract_bbox(source_image.copy())
@@ -254,6 +251,17 @@ class FirstOrderPredictor(BasePredictor):
         indices = np.argsort(areas)
         bboxes = bboxes[indices]
         # coords = coords[indices]
+
+        original_shape = source_image.shape[:2]
+        if self.gfpganer:
+            _, _, source_image = self.gfpganer.enhance(
+                cv2.cvtColor(source_image, cv2.COLOR_RGB2BGR)
+            )
+            source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+
+        bboxes[:, :4] = scale_bboxes(
+            original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
+        ).round()
         
         if isinstance(driving_videos_paths, str):
             if Path(driving_videos_paths).is_file():
@@ -450,17 +458,21 @@ class FirstOrderPredictor(BasePredictor):
         for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
             out = self.solov2.predict(image=[face_image.copy()])
-            box_masks.append(self.extract_mask(out))
+            if out["segm"][0].shape != face_image.shape[:2]:
+                out["segm"] = np.resize(out["segm"], (out["segm"].shape[0], *face_image.shape[:2]))
+            center = face_image.shape[0] // 2, face_image.shape[1] // 2
+            box_masks.append(self.extract_mask(out, center))
         return box_masks
 
 
     def extract_mask(
         self,
         result,
+        center,
         threshold=0.4,
     ):
         shape = result["segm"][0].shape
-
+        
         idx = result["label"] == 0
         result["segm"] = result["segm"][idx]
 
@@ -468,7 +480,11 @@ class FirstOrderPredictor(BasePredictor):
         result["segm"] = result["segm"][idx]
         
         if result["segm"].shape[0] > 0:
-            mask_idx = np.argmax(result["segm"].sum(axis=2).sum(axis=1))
+            #mask_idx = np.argmax(result["segm"].sum(axis=2).sum(axis=1))
+            mask_idx = -1
+            for i, mask in enumerate(result["segm"]):
+                if mask[center[0], center[1]]:
+                    mask_idx = i
             mask = result["segm"][mask_idx]
         else:
             mask = np.zeros(shape)

@@ -229,3 +229,46 @@ def compute_aspect_preserved_bbox(bbox, frame_shape, increase_area):
     bot = np.clip(bot, 0, frame_shape[0])
 
     return (left, top, right, bot)
+
+
+def scale_bboxes(img1_shape, bboxes, img0_shape, ratio_pad=None):
+
+    if ratio_pad is None:
+        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (
+            img1_shape[0] - img0_shape[0] * gain
+        ) / 2
+    else:
+        gain = ratio_pad[0][0]
+        pad = ratio_pad[1]
+
+    bboxes[:, [0, 2]] -= pad[0]  # x padding
+    bboxes[:, [1, 3]] -= pad[1]  # y padding
+    bboxes[:, :4] /= gain
+
+    # clip coords
+    bboxes[:, [0, 2]] = bboxes[:, [0, 2]].clip(0, img0_shape[1])  # x1, x2
+    bboxes[:, [1, 3]] = bboxes[:, [1, 3]].clip(0, img0_shape[0])
+    return bboxes
+
+
+def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
+    if ratio_pad is None:
+        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (
+            img1_shape[0] - img0_shape[0] * gain
+        ) / 2
+    else:
+        gain = ratio_pad[0][0]
+        pad = ratio_pad[1]
+
+    coords[:, 0] -= pad[0]  # x padding
+    coords[:, 1] -= pad[1]  # y padding
+    coords[
+        :,
+    ] /= gain
+
+    # clip coords
+    coords[:, 0] = coords[:, 0].clip(0, img0_shape[1])  # x1, x2
+    coords[:, 1] = coords[:, 1].clip(0, img0_shape[0])
+    return coords
