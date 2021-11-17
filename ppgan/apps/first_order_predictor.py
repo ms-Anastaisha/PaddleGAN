@@ -35,8 +35,6 @@ from ppgan.utils.animate import normalize_kp
 from ppgan.modules.keypoint_detector import KPDetector
 from ppgan.models.generators.occlusion_aware import OcclusionAwareGenerator
 from ppgan.faceutils import face_detection
-from ppgan.faceutils.mask.face_parser import FaceParser
-from ppgan.faceutils.face_segmentation.face_seg import FaceSeg
 from ppgan.faceutils.face_detection.detection_utils import upscale_detections, scale_bboxes
 from gfpgan import GFPGANer
 import moviepy.editor as mp
@@ -44,6 +42,8 @@ import moviepy.editor as mp
 from ppgan.apps.base_predictor import BasePredictor
 from PIL import Image
 import imutils
+import blend_modes as bm
+
 
 sys.path.insert(0, "../../PaddleDetection/deploy/python")
 from PaddleDetection.deploy.python.infer import *
@@ -174,11 +174,6 @@ class FirstOrderPredictor(BasePredictor):
         if face_enhancement:
             from ppgan.faceutils.face_enhancement import FaceEnhancement
             self.faceenhancer = FaceEnhancement(batch_size=batch_size)
-            # self.faceenhancer =  GFPGANer(model_path=gfpgan_model_path, 
-            #                              upscale = 2, 
-            #                              arch = 'clean',
-            #                              channel_multiplier = 2,
-            #                              bg_upsampler = None)
         self.detection_func = upscale_detections
         self.preprocessing = preprocessing
         self.face_alignment = face_align
@@ -213,7 +208,7 @@ class FirstOrderPredictor(BasePredictor):
             else:
                 image = Image.fromarray(image)
             image.paste(border, mask=border)
-            return np.asarray(image)
+            return image
         elif ssize[1] is not None:
             image =  imutils.resize(image, height=ssize[1])
             if image.shape[1] > border.size[0]:
@@ -222,35 +217,58 @@ class FirstOrderPredictor(BasePredictor):
             else:
                 image = Image.fromarray(image)
             image.paste(border, mask=border)
-            return np.asarray(image)
+            return image
         else:
             image = cv2.resize(image, ssize, cv2.INTER_AREA)
             image = Image.fromarray(image)
             image.paste(border, mask=border)
-            return np.asarray(image)
+            return image
 
-    def decorate(self, frames, borders):
-        h, w, _ = frames[0].shape
+    def _decorate_frame(self, image, effect, mode):
+        h, w = image.shape[:2]
+        effect = cv2.cvtColor(cv2.resize(cv2.imread(effect), (w,h)), cv2.COLOR_BGR2RGBA).astype(np.float32)
+        if mode == "multiply":
+            return bm.multiply(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2RGBA), effect, 0.5).astype(np.uint8)
+        elif mode == "hard_light":
+            return bm.hard_light(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2RGBA), effect, 0.5).astype(np.uint8)
+        elif mode == "overlay":
+            return bm.overlay(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2RGBA), effect, 0.5).astype(np.uint8)
+
+    def _decorate(self, image, dim, effects, border=None):
+        for effect in effects:
+            image = self._decorate_frame(image, effect["image"], effect["mode"]) 
+        if border is not None:
+            return self._add_border(image, dim, border)
+        return image 
+
+    def _define_border(self, frame_shape, borders):
+        h, w = frame_shape
         if w > h + 20:
             border = Image.open(borders["landscape"])
             desired_width, desired_height = border.size
-            #r = desired_height / float(h)
             dim = (None, desired_height)
-        elif h > w+ 20:
+        elif h > w + 20:
             border = Image.open(borders["portrait"])
             desired_width, desired_height = border.size
-            #r = desired_width / float(w)
             dim = (desired_width, None)
         else:
             border = Image.open(borders["square"])
             desired_height, desired_width = border.size
             dim = (desired_width, desired_height)
-        
-        return  [self._add_border(frame, dim, border) for frame in frames]
+        return dim, border
 
-    def write_with_audio(self, audio, out_frame, fps, borders=None):
-        if borders is not None:
-            out_frame = self.decorate(out_frame, borders)
+
+    def decorate(self, frames, decoration):
+        frame_shape = frames[0].shape[:2]
+        borders = decoration['borders']
+        effects = decoration['effects']
+        dim, border = self._define_border(frame_shape, borders)        
+        
+        return  [self._decorate(frame, dim, effects, border) for frame in frames]
+
+    def write_with_audio(self, audio, out_frame, fps, decoration=None):
+        if decoration is not None:
+            out_frame = self.decorate(out_frame, decoration)
         if audio is None:
             imageio.mimsave(os.path.join(self.output, self.filename),
                             [np.array(frame) for frame in out_frame],
@@ -274,9 +292,8 @@ class FirstOrderPredictor(BasePredictor):
             os.remove(temp)
 
 
-    def run(self, source_image, driving_videos_paths, filename, audio, borders=None):
-        
-        
+    def run(self, source_image, driving_videos_paths, filename, audio, decoration=None):
+         
         self.filename = filename
         # videoclip_1 = mp.VideoFileClip(driving_video)
         # audio = videoclip_1.audio
@@ -388,7 +405,7 @@ class FirstOrderPredictor(BasePredictor):
 
         print("video stitching", time.time() - start)
         start = time.time()
-        self.write_with_audio(None, out_frame, fps, borders)
+        self.write_with_audio(None, out_frame, fps, decoration)
         print("video writing", time.time() - start)
 
 

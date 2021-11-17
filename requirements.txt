@@ -11,3 +11,4 @@ munch
 natsort
 moviepy
 imutils
+blend_modes

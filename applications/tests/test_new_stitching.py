@@ -27,7 +27,7 @@ args = {
     "solov_path": "/home/user/paddle/PaddleGAN/PaddleDetection/solov2_r50_enhance_coco"
 }
 resources = {
-    "source_image": "/home/user/paddle/PaddleGAN/data/source_image",
+    "source_image": ["/home/user/paddle/PaddleGAN/data/source_image/download-21.png"],
                     #[#"/home/user/paddle/PaddleGAN/data/selfie.jpeg", 
                     #"/home/anastasia/paddleGan/PaddleGAN/data/source_image/download-21.png"],
                     #"/home/user/paddle/PaddleGAN/data/selfie4.jpg", 
@@ -37,18 +37,23 @@ resources = {
     "/home/user/paddle/PaddleGAN/data/jingle_bells_acapella_part.mp4"
     ], 
     "audio": None, 
+    "decoration": 
+    {
     "borders": {"landscape": "/home/user/paddle/PaddleGAN/data/borders/landscape_border.png",
                 "square": "/home/user/paddle/PaddleGAN/data/borders/square_border.png", 
-                "portrait": "/home/user/paddle/PaddleGAN/data/borders/portrait_border.png"}
+                "portrait": "/home/user/paddle/PaddleGAN/data/borders/portrait_border.png"}, 
+    "effects": [{"image": "/home/user/paddle/PaddleGAN/data/decoration/space.jpeg", "mode": "multiply"}]
+    }
+    
 }
 if __name__ == '__main__':
     start = time.time()
     predictor = FirstOrderPredictor(**args)
-    resources["source_image"] = [str(filepath.absolute()) for filepath in pathlib.Path(resources["source_image"]).glob('**/*')]
+    #resources["source_image"] = [str(filepath.absolute()) for filepath in pathlib.Path(resources["source_image"]).glob('**/*')]
     
     for img_path in resources["source_image"]:
         basename = os.path.basename(img_path) 
         name, ext = os.path.splitext(basename)
 
-        predictor.run(img_path, resources["driving_video"], name  + '.mp4', None, resources["borders"])
+        predictor.run(img_path, resources["driving_video"], name  + '.mp4', None, resources["decoration"])
     print("inference time (for 16 sec video):", (time.time() - start) / len(resources["source_image"]))
