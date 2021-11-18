@@ -42,7 +42,7 @@ from ppgan.apps.base_predictor import BasePredictor
 from PIL import Image
 import imutils
 import blend_modes as bm
-import time
+
 
 sys.path.insert(0, "../../PaddleDetection/deploy/python")
 from PaddleDetection.deploy.python.infer import *
@@ -244,10 +244,8 @@ class FirstOrderPredictor(BasePredictor):
         return  [self._decorate(frame, dim, hover, border) for frame in tqdm(frames)]
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
-        start = time.time()
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
-        print("decoration", time.time() - start)
         if audio is None:
             imageio.mimsave(os.path.join(self.output, self.filename),
                             [np.array(frame) for frame in out_frame],
