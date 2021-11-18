@@ -440,7 +440,7 @@ class FirstOrderPredictor(BasePredictor):
 
         # frame = [image]
         predictions = detector.get_detections_for_image(np.array(image))
-        predictions = list(filter(lambda x: ((x[3]-x[1])*(x[2]-x[0])) > 1000, predictions))
+        predictions = list(filter(lambda x: ((x[3]-x[1])*(x[2]-x[0])) > 300, predictions))
         # result, coords = self.detection_func(image, predictions)
 
         h, w, _ = image.shape
