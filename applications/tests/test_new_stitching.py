@@ -8,7 +8,7 @@ from ppgan.apps.first_order_predictor import FirstOrderPredictor
 import time
 import pathlib
 args = {
-    "output": "output",
+    "output": "output_hovers_borders",
     "filename": "result.mp4",
     "weight_path": None,
     "relative": True,
@@ -27,7 +27,7 @@ args = {
     "solov_path": "/home/user/paddle/PaddleGAN/PaddleDetection/solov2_r50_enhance_coco"
 }
 resources = {
-    "source_image": ["/home/user/paddle/PaddleGAN/data/source_image/download-21.png"],
+    "source_image": "/home/user/paddle/PaddleGAN/data/source_image",
                     #[#"/home/user/paddle/PaddleGAN/data/selfie.jpeg", 
                     #"/home/anastasia/paddleGan/PaddleGAN/data/source_image/download-21.png"],
                     #"/home/user/paddle/PaddleGAN/data/selfie4.jpg", 
@@ -39,17 +39,19 @@ resources = {
     "audio": None, 
     "decoration": 
     {
-    "borders": {"landscape": "/home/user/paddle/PaddleGAN/data/borders/landscape_border.png",
-                "square": "/home/user/paddle/PaddleGAN/data/borders/square_border.png", 
-                "portrait": "/home/user/paddle/PaddleGAN/data/borders/portrait_border.png"}, 
-    "effects": [{"image": "/home/user/paddle/PaddleGAN/data/decoration/space.jpeg", "mode": "multiply"}]
+    "borders": {"landscape": "/home/user/paddle/PaddleGAN/data/decoration/Landscape_Frame_1.png",
+                 "square": "/home/user/paddle/PaddleGAN/data/decoration/Square_Frame_1.png", 
+                 "portrait": "/home/user/paddle/PaddleGAN/data/decoration/Portrait_Frame_1.png"}, 
+    "hovers": {"landscape": "/home/user/paddle/PaddleGAN/data/decoration/Landscape_Overlay__1_SCREEN.jpg", 
+                "square": "/home/user/paddle/PaddleGAN/data/decoration/Square_Overlay__1_SCREEN.jpg",
+                "portrait": "/home/user/paddle/PaddleGAN/data/decoration/Portrait_Overlay__1_SCREEN.jpg"}
     }
     
 }
 if __name__ == '__main__':
     start = time.time()
     predictor = FirstOrderPredictor(**args)
-    #resources["source_image"] = [str(filepath.absolute()) for filepath in pathlib.Path(resources["source_image"]).glob('**/*')]
+    resources["source_image"] = [str(filepath.absolute()) for filepath in pathlib.Path(resources["source_image"]).glob('**/*')]
     
     for img_path in resources["source_image"]:
         basename = os.path.basename(img_path) 

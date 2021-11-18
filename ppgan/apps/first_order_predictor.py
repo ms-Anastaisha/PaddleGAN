@@ -224,47 +224,41 @@ class FirstOrderPredictor(BasePredictor):
             image.paste(border, mask=border)
             return image
 
-    def _decorate_frame(self, image, effect, mode):
+    def _decorate_frame(self, image, effect):
         h, w = image.shape[:2]
-        effect = cv2.cvtColor(cv2.resize(cv2.imread(effect), (w,h)), cv2.COLOR_BGR2RGBA).astype(np.float32)
-        if mode == "multiply":
-            return bm.multiply(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2RGBA), effect, 0.5).astype(np.uint8)
-        elif mode == "hard_light":
-            return bm.hard_light(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2RGBA), effect, 0.5).astype(np.uint8)
-        elif mode == "overlay":
-            return bm.overlay(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2RGBA), effect, 0.5).astype(np.uint8)
+        effect = cv2.resize(effect, (w,h)).astype(np.float32)
+        return bm.screen(cv2.cvtColor(image, cv2.COLOR_RGB2RGBA).astype(np.float32), effect, 1.).astype(np.uint8)
 
-    def _decorate(self, image, dim, effects, border=None):
-        for effect in effects:
-            image = self._decorate_frame(image, effect["image"], effect["mode"]) 
+    def _decorate(self, image, dim, effect=None, border=None):
+        if effect is not None:
+            image = self._decorate_frame(image, effect) 
         if border is not None:
             return self._add_border(image, dim, border)
         return image 
 
-    def _define_border(self, frame_shape, borders):
+    def _define_effects(self, frame_shape, effects, borders):
         h, w = frame_shape
-        if w > h + 20:
-            border = Image.open(borders["landscape"])
-            desired_width, desired_height = border.size
-            dim = (None, desired_height)
-        elif h > w + 20:
-            border = Image.open(borders["portrait"])
-            desired_width, desired_height = border.size
-            dim = (desired_width, None)
+        key = "landscape" if w > h+20 else "portrait" if h > w + 20 else "square"
+        print(key)
+        border = Image.open(borders[key]) if borders is not None else None
+        hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_RGB2RGBA) if effects is not None else None
+        if border is None:
+            return None, None, hover
+        desired_width, desired_height = border.size
+        if key == "landscape":
+            return (None, desired_height), border, hover
+        elif key == "portrait":
+            return (desired_width, None), border, hover
         else:
-            border = Image.open(borders["square"])
-            desired_height, desired_width = border.size
-            dim = (desired_width, desired_height)
-        return dim, border
-
-
+            return (desired_width, desired_height), border, hover    
+        
     def decorate(self, frames, decoration):
         frame_shape = frames[0].shape[:2]
         borders = decoration['borders']
-        effects = decoration['effects']
-        dim, border = self._define_border(frame_shape, borders)        
+        effects = decoration['hovers']
+        dim, border, hover = self._define_effects(frame_shape, effects, borders)        
         
-        return  [self._decorate(frame, dim, effects, border) for frame in frames]
+        return  [self._decorate(frame, dim, hover, border) for frame in frames]
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
         if decoration is not None:
