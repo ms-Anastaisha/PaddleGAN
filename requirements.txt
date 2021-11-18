@@ -12,3 +12,4 @@ natsort
 moviepy
 imutils
 blend_modes
+gdown

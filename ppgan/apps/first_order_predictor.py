@@ -35,6 +35,8 @@ from ppgan.modules.keypoint_detector import KPDetector
 from ppgan.models.generators.occlusion_aware import OcclusionAwareGenerator
 from ppgan.faceutils import face_detection
 from ppgan.faceutils.face_detection.detection_utils import upscale_detections, scale_bboxes
+from ppgan.faceutils.face_classification.face_classification import FaceClassification
+
 from gfpgan import GFPGANer
 import moviepy.editor as mp
 
@@ -151,7 +153,7 @@ class FirstOrderPredictor(BasePredictor):
         self.generator, self.kp_detector = self.load_checkpoints(
             self.cfg, self.weight_path)
         self.solov2 = load_detector(solov_path)
-      
+        self.face_classifier = FaceClassification()
         
         # from realesrgan import RealESRGANer
         # bg_upsampler = RealESRGANer(
@@ -252,11 +254,6 @@ class FirstOrderPredictor(BasePredictor):
                             fps=fps)
         else:
             audio_background = mp.AudioFileClip(audio)
-            #if audio.endswith(".mp3"):
-            #    audio_background = mp.AudioFileClip(audio)
-            #elif audio.endswith(".mp4"):
-            #    audio_background = mp.VideoFileClip(audio)
-            #    audio_background = audio_background.audio 
             temp = 'tmp.mp4'
             imageio.mimsave(temp,
                            [np.array(frame) for frame in out_frame],
@@ -306,7 +303,7 @@ class FirstOrderPredictor(BasePredictor):
         bboxes[:, :4] = scale_bboxes(
             original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
         ).round()
-       
+        
         if isinstance(driving_videos_paths, str):
             if Path(driving_videos_paths).is_file():
                 driving_videos_paths = [driving_videos_paths]
@@ -341,7 +338,7 @@ class FirstOrderPredictor(BasePredictor):
             results.append({'rec': rec, 'predict': [predictions[i] for i in range(predictions.shape[0])]})
             if len(bboxes) == 1 or not self.multi_person:
                 break
-        
+
         out_frame = []
 
         
@@ -376,10 +373,24 @@ class FirstOrderPredictor(BasePredictor):
             patch[:, :, :] = 0
             mask[:, :] = 0            
 
+           
+        if (audio is None) or isinstance(audio, str):
+            audio_path = audio
+        else:
+            if len(bboxes) == 1:
+                gender, age = self.classify_face(source_image.copy()[bboxes[0][1]:bboxes[0][3], bboxes[0][0]:bboxes[0][2]])
+                if (age <= 2) and (audio["kid"] is not None):
+                    audio_path = audio["kid"]
+                elif (gender == 0):
+                    audio_path = audio["male"]
+                elif (gender == 1):
+                    audio_path = audio["female"]
+            else:
+                audio_path = audio["group"]
+
         
-    
-        self.write_with_audio(None, out_frame, fps, decoration)
-        
+        self.write_with_audio(audio_path, out_frame, fps, decoration)
+       
 
 
     def load_checkpoints(self, config, checkpoint_path):
@@ -466,7 +477,7 @@ class FirstOrderPredictor(BasePredictor):
 
         # frame = [image]
         predictions = detector.get_detections_for_image(np.array(image))
-        predictions = list(filter(lambda x: ((x[3]-x[1])*(x[2]-x[0])) > 1000, predictions))
+        predictions = list(filter(lambda x: ((x[3]-x[1])*(x[2]-x[0])) > 300, predictions))
         # result, coords = self.detection_func(image, predictions)
 
         h, w, _ = image.shape
@@ -476,6 +487,9 @@ class FirstOrderPredictor(BasePredictor):
         # return np.array(result), np.array(coords)
         return np.array(predictions)
 
+    def classify_face(self, image):
+        gender, age = self.face_classifier.classify_image(image.copy())
+        return gender, age
 
     def extract_masks(self, bboxes, source_image):
         if len(bboxes) == 1:
@@ -483,9 +497,15 @@ class FirstOrderPredictor(BasePredictor):
         box_masks = []
         for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
-            center = face_image.shape[0] // 2, face_image.shape[1] // 2
             out = self.solov2.predict(image=[face_image.copy()])
-            box_masks.append(self.extract_mask(out, center))
+            if out["segm"][0].shape != face_image.shape[:2]:
+                out["segm"] = np.resize(out["segm"], (out["segm"].shape[0], *face_image.shape[:2]))
+            center = face_image.shape[0] // 2, face_image.shape[1] // 2
+            mask = self.extract_mask(out, center)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 15))
+            mask = cv2.dilate(mask, kernel)
+            box_masks.append(mask)
+            # box_masks.append(self.extract_mask(out, center))
         return box_masks
 
 
@@ -496,7 +516,7 @@ class FirstOrderPredictor(BasePredictor):
         threshold=0.4,
     ):
         shape = result["segm"][0].shape
-
+        
         idx = result["label"] == 0
         result["segm"] = result["segm"][idx]
 

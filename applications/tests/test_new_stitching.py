@@ -8,7 +8,7 @@ from ppgan.apps.first_order_predictor import FirstOrderPredictor
 import time
 import pathlib
 args = {
-    "output": "output_hovers_borders_new",
+    "output": "output_decoration_audio",
     "filename": "result.mp4",
     "weight_path": None,
     "relative": True,
@@ -36,7 +36,6 @@ resources = {
     "/home/user/paddle/PaddleGAN/data/video.mp4", 
     "/home/user/paddle/PaddleGAN/data/jingle_bells_acapella_part.mp4"
     ], 
-    "audio": None, 
     "decoration": 
     {
     "borders": {"landscape": "/home/user/paddle/PaddleGAN/data/decoration/Landscape_Frame_1.png",
@@ -45,8 +44,13 @@ resources = {
     "hovers": {"landscape": "/home/user/paddle/PaddleGAN/data/decoration/Landscape_Overlay__1_SCREEN.jpg", 
                 "square": "/home/user/paddle/PaddleGAN/data/decoration/Square_Overlay__1_SCREEN.jpg",
                 "portrait": "/home/user/paddle/PaddleGAN/data/decoration/Portrait_Overlay__1_SCREEN.jpg"}
+    },
+    "audio": {
+        "male": "/home/user/paddle/PaddleGAN/data/audio/male.mp3",
+        "female": "/home/user/paddle/PaddleGAN/data/audio/female.mp3",
+        "kid": "/home/user/paddle/PaddleGAN/data/audio/kid.mp3",
+        "group": "/home/user/paddle/PaddleGAN/data/audio/default.mp3"
     }
-    
 }
 if __name__ == '__main__':
     start = time.time()
@@ -57,5 +61,5 @@ if __name__ == '__main__':
         basename = os.path.basename(img_path) 
         name, ext = os.path.splitext(basename)
 
-        predictor.run(img_path, resources["driving_video"], name  + '.mp4', None, resources["decoration"])
+        predictor.run(img_path, resources["driving_video"], name  + '.mp4', resources["audio"], resources["decoration"])
     print("inference time :", (time.time() - start) / len(resources["source_image"]))
