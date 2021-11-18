@@ -19,7 +19,6 @@ import cv2
 
 import yaml
 import imageio
-import time
 import numpy as np
 from tqdm import tqdm, trange
 from pathlib import Path
@@ -43,7 +42,7 @@ from ppgan.apps.base_predictor import BasePredictor
 from PIL import Image
 import imutils
 import blend_modes as bm
-
+import time
 
 sys.path.insert(0, "../../PaddleDetection/deploy/python")
 from PaddleDetection.deploy.python.infer import *
@@ -148,7 +147,7 @@ class FirstOrderPredictor(BasePredictor):
         self.multi_person = multi_person
         self.face_enhancement = face_enhancement
         self.batch_size = batch_size
-        start = time.time()
+
         self.generator, self.kp_detector = self.load_checkpoints(
             self.cfg, self.weight_path)
         self.solov2 = load_detector(solov_path)
@@ -170,7 +169,7 @@ class FirstOrderPredictor(BasePredictor):
                                             bg_upsampler = None)
         else:
             self.gfpganer = None
-        print("model loading" , time.time() - start)
+       
         if face_enhancement:
             from ppgan.faceutils.face_enhancement import FaceEnhancement
             self.faceenhancer = FaceEnhancement(batch_size=batch_size)
@@ -197,54 +196,37 @@ class FirstOrderPredictor(BasePredictor):
                 dim = (1024, int(r*h))
             img = cv2.resize(img, dim)
         return img
-
-
     def _add_border(self, image, ssize, border):
-        if ssize[0] is not None:
-            image = imutils.resize(image, width=ssize[0])
-            if image.shape[0] > border.size[1]:
-                pad = (image.shape[0] - border.size[1]) // 2 
-                image = Image.fromarray(image[pad:-pad,:])
-            else:
-                image = Image.fromarray(image)
-            image.paste(border, mask=border)
-            return image
-        elif ssize[1] is not None:
-            image =  imutils.resize(image, height=ssize[1])
-            if image.shape[1] > border.size[0]:
-                pad = (image.shape[1] - border.size[0]) // 2
-                image = Image.fromarray(image[:, pad:-pad])
-            else:
-                image = Image.fromarray(image)
-            image.paste(border, mask=border)
-            return image
-        else:
-            image = cv2.resize(image, ssize, cv2.INTER_AREA)
-            image = Image.fromarray(image)
-            image.paste(border, mask=border)
-            return image
+        image = imutils.resize(image, width=ssize[0], height=ssize[1])
+        if image.shape[0] > border.shape[0]:
+            pad = (image.shape[0] - border.shape[0]) // 2 
+            image = image[pad:-pad,:]
+        elif image.shape[1] > border.shape[1]:
+            pad = (image.shape[1] - border.shape[1]) // 2
+            image = image[:, pad:-pad]
 
-    def _decorate_frame(self, image, effect):
         h, w = image.shape[:2]
-        effect = cv2.resize(effect, (w,h)).astype(np.float32)
+        border = cv2.resize(border, (w,h))
+        image = Image.fromarray(image)
+        border = Image.fromarray(border)
+        
+        image.paste(border, mask=border)
+        return image
+        
+    def _decorate_frame(self, image, effect):    
         return bm.screen(cv2.cvtColor(image, cv2.COLOR_RGB2RGBA).astype(np.float32), effect, 1.).astype(np.uint8)
 
     def _decorate(self, image, dim, effect=None, border=None):
-        if effect is not None:
-            image = self._decorate_frame(image, effect) 
-        if border is not None:
-            return self._add_border(image, dim, border)
-        return image 
+        image = self._decorate_frame(image, effect) 
+        return self._add_border(image, dim, border)
+
 
     def _define_effects(self, frame_shape, effects, borders):
         h, w = frame_shape
         key = "landscape" if w > h+20 else "portrait" if h > w + 20 else "square"
-        print(key)
-        border = Image.open(borders[key]) if borders is not None else None
-        hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_RGB2RGBA) if effects is not None else None
-        if border is None:
-            return None, None, hover
-        desired_width, desired_height = border.size
+        border = cv2.cvtColor(cv2.imread(borders[key], -1), cv2.COLOR_BGR2RGBA)
+        hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_BGR2RGBA)
+        desired_height, desired_width = border.shape[:2]
         if key == "landscape":
             return (None, desired_height), border, hover
         elif key == "portrait":
@@ -256,13 +238,16 @@ class FirstOrderPredictor(BasePredictor):
         frame_shape = frames[0].shape[:2]
         borders = decoration['borders']
         effects = decoration['hovers']
-        dim, border, hover = self._define_effects(frame_shape, effects, borders)        
-        
-        return  [self._decorate(frame, dim, hover, border) for frame in frames]
+        dim, border, hover = self._define_effects(frame_shape, effects, borders) 
+        h, w = frame_shape
+        hover = cv2.resize(hover, (w,h)).astype(np.float32)          
+        return  [self._decorate(frame, dim, hover, border) for frame in tqdm(frames)]
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
+        start = time.time()
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
+        print("decoration", time.time() - start)
         if audio is None:
             imageio.mimsave(os.path.join(self.output, self.filename),
                             [np.array(frame) for frame in out_frame],
@@ -305,10 +290,8 @@ class FirstOrderPredictor(BasePredictor):
         source_image = self.read_img(source_image)
       
         results = []
-        start = time.time()
         bboxes = self.extract_bbox(source_image.copy())
         # bboxes, coords = self.extract_bbox(source_image.copy())
-        print("extract bboxes", time.time() - start)
         print(str(len(bboxes)) + " persons have been detected")
         areas = [x[4] for x in bboxes]
         indices = np.argsort(areas)
@@ -363,11 +346,9 @@ class FirstOrderPredictor(BasePredictor):
         
         out_frame = []
 
-        start = time.time()
-        # box_masks = self.extract_masks(results, coords, source_image)
+        
         box_masks = self.extract_masks(bboxes, source_image)
-        print("masks extraction: ", time.time()-start)
-        start = time.time()
+       
         
         patch = np.zeros(source_image.shape).astype('uint8')
         mask = np.zeros(source_image.shape[:2]).astype('uint8')
@@ -397,10 +378,10 @@ class FirstOrderPredictor(BasePredictor):
             patch[:, :, :] = 0
             mask[:, :] = 0            
 
-        print("video stitching", time.time() - start)
-        start = time.time()
+        
+    
         self.write_with_audio(None, out_frame, fps, decoration)
-        print("video writing", time.time() - start)
+        
 
 
     def load_checkpoints(self, config, checkpoint_path):
@@ -474,7 +455,6 @@ class FirstOrderPredictor(BasePredictor):
                 if self.face_enhancement:
                 #     _, _, img = self.faceenhancer.enhance(img[0])
                     img = self.faceenhancer.enhance_from_batch(img)
-                # print(img.shape)
                 predictions.append(img)
                 begin_idx += frame_num
         return np.concatenate(predictions)

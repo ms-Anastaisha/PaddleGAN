@@ -8,7 +8,7 @@ from ppgan.apps.first_order_predictor import FirstOrderPredictor
 import time
 import pathlib
 args = {
-    "output": "output_hovers_borders",
+    "output": "output_hovers_borders_new",
     "filename": "result.mp4",
     "weight_path": None,
     "relative": True,
@@ -58,4 +58,4 @@ if __name__ == '__main__':
         name, ext = os.path.splitext(basename)
 
         predictor.run(img_path, resources["driving_video"], name  + '.mp4', None, resources["decoration"])
-    print("inference time (for 16 sec video):", (time.time() - start) / len(resources["source_image"]))
+    print("inference time :", (time.time() - start) / len(resources["source_image"]))
