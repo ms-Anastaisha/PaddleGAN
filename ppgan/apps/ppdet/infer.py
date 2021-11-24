@@ -28,7 +28,7 @@ from paddle.inference import create_predictor
 # from picodet_postprocess import PicoDetPostProcess
 from .preprocess import preprocess, Resize, NormalizeImage, Permute, PadStride, LetterBoxResize, WarpAffine
 # from visualize import visualize_box_mask
-# from .utils import argsparser, Timer, get_current_memory_mb
+from .utils import argsparser, Timer, get_current_memory_mb
 
 # Global dictionary
 SUPPORT_MODELS = {
