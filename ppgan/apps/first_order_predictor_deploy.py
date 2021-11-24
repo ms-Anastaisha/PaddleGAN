@@ -43,6 +43,23 @@ from PIL import Image
 import imutils
 import blend_modes as bm
 
+# Global dictionary
+SUPPORT_MODELS = {
+    'YOLO',
+    'RCNN',
+    'SSD',
+    'Face',
+    'FCOS',
+    'SOLOv2',
+    'TTFNet',
+    'S2ANet',
+    'JDE',
+    'FairMOT',
+    'DeepSORT',
+    'GFL',
+    'PicoDet',
+    'CenterNet',
+}
 
 class PredictConfig():
     """set config of preprocess, postprocess and visualize
