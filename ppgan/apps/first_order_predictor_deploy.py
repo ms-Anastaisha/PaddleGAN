@@ -43,6 +43,8 @@ from PIL import Image
 import imutils
 import blend_modes as bm
 
+from .ppdet.infer import *
+
 # Global dictionary
 SUPPORT_MODELS = {
     'YOLO',
