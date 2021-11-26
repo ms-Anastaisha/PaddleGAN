@@ -22,6 +22,7 @@ import imageio
 import numpy as np
 from tqdm import tqdm, trange
 from pathlib import Path
+from copy import deepcopy
 
 import sys
 
@@ -345,6 +346,8 @@ class FirstOrderPredictor(BasePredictor):
             os.remove(temp)
 
     def process_image(self, source_image, driving_videos, audio=None, decoration=None):
+
+        driving_videos = deepcopy(driving_videos)
 
         img = np.array(source_image)
         if img.ndim == 2:
