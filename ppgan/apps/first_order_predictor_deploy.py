@@ -24,6 +24,7 @@ from tqdm import tqdm, trange
 from pathlib import Path
 
 import sys
+
 cur_path = os.path.abspath(os.path.dirname(__file__))
 root_path = os.path.split(cur_path)[0]
 sys.path.insert(0, os.path.dirname(root_path))
@@ -34,7 +35,10 @@ from ppgan.utils.animate import normalize_kp
 from ppgan.modules.keypoint_detector import KPDetector
 from ppgan.models.generators.occlusion_aware import OcclusionAwareGenerator
 from ppgan.faceutils import face_detection
-from ppgan.faceutils.face_detection.detection_utils import upscale_detections, scale_bboxes
+from ppgan.faceutils.face_detection.detection_utils import (
+    upscale_detections,
+    scale_bboxes,
+)
 from gfpgan import GFPGANer
 import moviepy.editor as mp
 
@@ -47,23 +51,24 @@ from .ppdet.infer import *
 
 # Global dictionary
 SUPPORT_MODELS = {
-    'YOLO',
-    'RCNN',
-    'SSD',
-    'Face',
-    'FCOS',
-    'SOLOv2',
-    'TTFNet',
-    'S2ANet',
-    'JDE',
-    'FairMOT',
-    'DeepSORT',
-    'GFL',
-    'PicoDet',
-    'CenterNet',
+    "YOLO",
+    "RCNN",
+    "SSD",
+    "Face",
+    "FCOS",
+    "SOLOv2",
+    "TTFNet",
+    "S2ANet",
+    "JDE",
+    "FairMOT",
+    "DeepSORT",
+    "GFL",
+    "PicoDet",
+    "CenterNet",
 }
 
-class PredictConfig():
+
+class PredictConfig:
     """set config of preprocess, postprocess and visualize
     Args:
         model_dir (str): root path of model.yml
@@ -71,51 +76,50 @@ class PredictConfig():
 
     def __init__(self, model_dir):
         # parsing Yaml config for Preprocess
-        deploy_file = os.path.join(model_dir, 'infer_cfg.yml')
+        deploy_file = os.path.join(model_dir, "infer_cfg.yml")
         with open(deploy_file) as f:
             yml_conf = yaml.safe_load(f)
         self.check_model(yml_conf)
-        self.arch = yml_conf['arch']
-        self.preprocess_infos = yml_conf['Preprocess']
-        self.min_subgraph_size = yml_conf['min_subgraph_size']
-        self.labels = yml_conf['label_list']
+        self.arch = yml_conf["arch"]
+        self.preprocess_infos = yml_conf["Preprocess"]
+        self.min_subgraph_size = yml_conf["min_subgraph_size"]
+        self.labels = yml_conf["label_list"]
         self.mask = False
-        self.use_dynamic_shape = yml_conf['use_dynamic_shape']
-        if 'mask' in yml_conf:
-            self.mask = yml_conf['mask']
+        self.use_dynamic_shape = yml_conf["use_dynamic_shape"]
+        if "mask" in yml_conf:
+            self.mask = yml_conf["mask"]
         self.tracker = None
-        if 'tracker' in yml_conf:
-            self.tracker = yml_conf['tracker']
-        if 'NMS' in yml_conf:
-            self.nms = yml_conf['NMS']
-        if 'fpn_stride' in yml_conf:
-            self.fpn_stride = yml_conf['fpn_stride']
+        if "tracker" in yml_conf:
+            self.tracker = yml_conf["tracker"]
+        if "NMS" in yml_conf:
+            self.nms = yml_conf["NMS"]
+        if "fpn_stride" in yml_conf:
+            self.fpn_stride = yml_conf["fpn_stride"]
         self.print_config()
 
     def check_model(self, yml_conf):
         """
         Raises:
-            ValueError: loaded model not in supported model type 
+            ValueError: loaded model not in supported model type
         """
         for support_model in SUPPORT_MODELS:
-            if support_model in yml_conf['arch']:
+            if support_model in yml_conf["arch"]:
                 return True
-        raise ValueError("Unsupported arch: {}, expect {}".format(yml_conf[
-            'arch'], SUPPORT_MODELS))
+        raise ValueError(
+            "Unsupported arch: {}, expect {}".format(yml_conf["arch"], SUPPORT_MODELS)
+        )
 
     def print_config(self):
-        print('-----------  Model Configuration -----------')
-        print('%s: %s' % ('Model Arch', self.arch))
-        print('%s: ' % ('Transform Order'))
+        print("-----------  Model Configuration -----------")
+        print("%s: %s" % ("Model Arch", self.arch))
+        print("%s: " % ("Transform Order"))
         for op_info in self.preprocess_infos:
-            print('--%s: %s' % ('transform op', op_info['type']))
-        print('--------------------------------------------')
+            print("--%s: %s" % ("transform op", op_info["type"]))
+        print("--------------------------------------------")
 
 
 def load_detector(model_path):
-    pred_config = PredictConfig(
-        model_path
-    )
+    pred_config = PredictConfig(model_path)
     detector_func = "DetectorSOLOv2"
 
     detector = eval(detector_func)(
@@ -127,27 +131,30 @@ def load_detector(model_path):
     )
     return detector
 
+
 class FirstOrderPredictor(BasePredictor):
-    def __init__(self,
-                 output='output',
-                 weight_path=None,
-                 config=None,
-                 relative=False,
-                 adapt_scale=False,
-                 find_best_frame=False,
-                 best_frame=None,
-                 ratio=1.0,
-                 filename='result.mp4',
-                 face_detector='sfd',
-                 multi_person=False,
-                 image_size=256,
-                 face_enhancement=False,
-                 gfpgan_model_path=None, 
-                 batch_size=1,
-                 mobile_net=False, 
-                 preprocessing=True,
-                 face_align=False, 
-                solov_path=None):
+    def __init__(
+        self,
+        output="output",
+        weight_path=None,
+        config=None,
+        relative=False,
+        adapt_scale=False,
+        find_best_frame=False,
+        best_frame=None,
+        ratio=1.0,
+        filename="result.mp4",
+        face_detector="sfd",
+        multi_person=False,
+        image_size=256,
+        face_enhancement=False,
+        gfpgan_model_path=None,
+        batch_size=1,
+        mobile_net=False,
+        preprocessing=True,
+        face_align=False,
+        solov_path=None,
+    ):
         if config is not None and isinstance(config, str):
             with open(config) as f:
                 self.cfg = yaml.load(f, Loader=yaml.SafeLoader)
@@ -155,46 +162,46 @@ class FirstOrderPredictor(BasePredictor):
             self.cfg = config
         elif config is None:
             self.cfg = {
-                'model': {
-                    'common_params': {
-                        'num_kp': 10,
-                        'num_channels': 3,
-                        'estimate_jacobian': True
+                "model": {
+                    "common_params": {
+                        "num_kp": 10,
+                        "num_channels": 3,
+                        "estimate_jacobian": True,
                     },
-                    'generator': {
-                        'kp_detector_cfg': {
-                            'temperature': 0.1,
-                            'block_expansion': 32,
-                            'max_features': 1024,
-                            'scale_factor': 0.25,
-                            'num_blocks': 5
+                    "generator": {
+                        "kp_detector_cfg": {
+                            "temperature": 0.1,
+                            "block_expansion": 32,
+                            "max_features": 1024,
+                            "scale_factor": 0.25,
+                            "num_blocks": 5,
                         },
-                        'generator_cfg': {
-                            'block_expansion': 64,
-                            'max_features': 512,
-                            'num_down_blocks': 2,
-                            'num_bottleneck_blocks': 6,
-                            'estimate_occlusion_map': True,
-                            'dense_motion_params': {
-                                'block_expansion': 64,
-                                'max_features': 1024,
-                                'num_blocks': 5,
-                                'scale_factor': 0.25
-                            }
-                        }
-                    }
+                        "generator_cfg": {
+                            "block_expansion": 64,
+                            "max_features": 512,
+                            "num_down_blocks": 2,
+                            "num_bottleneck_blocks": 6,
+                            "estimate_occlusion_map": True,
+                            "dense_motion_params": {
+                                "block_expansion": 64,
+                                "max_features": 1024,
+                                "num_blocks": 5,
+                                "scale_factor": 0.25,
+                            },
+                        },
+                    },
                 }
             }
         self.image_size = image_size
         if weight_path is None:
             if mobile_net:
-                vox_cpk_weight_url = 'https://paddlegan.bj.bcebos.com/applications/first_order_model/vox_mobile.pdparams'
+                vox_cpk_weight_url = "https://paddlegan.bj.bcebos.com/applications/first_order_model/vox_mobile.pdparams"
 
             else:
                 if self.image_size == 512:
-                    vox_cpk_weight_url = 'https://paddlegan.bj.bcebos.com/applications/first_order_model/vox-cpk-512.pdparams'
+                    vox_cpk_weight_url = "https://paddlegan.bj.bcebos.com/applications/first_order_model/vox-cpk-512.pdparams"
                 else:
-                    vox_cpk_weight_url = 'https://paddlegan.bj.bcebos.com/applications/first_order_model/vox-cpk.pdparams'
+                    vox_cpk_weight_url = "https://paddlegan.bj.bcebos.com/applications/first_order_model/vox-cpk.pdparams"
             weight_path = get_path_from_url(vox_cpk_weight_url)
 
         self.weight_path = weight_path
@@ -213,10 +220,10 @@ class FirstOrderPredictor(BasePredictor):
         self.batch_size = batch_size
 
         self.generator, self.kp_detector = self.load_checkpoints(
-            self.cfg, self.weight_path)
+            self.cfg, self.weight_path
+        )
         self.solov2 = load_detector(solov_path)
-      
-        
+
         # from realesrgan import RealESRGANer
         # bg_upsampler = RealESRGANer(
         #         scale=2,
@@ -225,22 +232,24 @@ class FirstOrderPredictor(BasePredictor):
         #         tile_pad=10,
         #         pre_pad=0,
         #         half=True)
-        if gfpgan_model_path: 
-            self.gfpganer = GFPGANer(model_path=gfpgan_model_path, 
-                                            upscale = 2, 
-                                            arch = 'clean',
-                                            channel_multiplier = 2,
-                                            bg_upsampler = None)
+        if gfpgan_model_path:
+            self.gfpganer = GFPGANer(
+                model_path=gfpgan_model_path,
+                upscale=2,
+                arch="clean",
+                channel_multiplier=2,
+                bg_upsampler=None,
+            )
         else:
             self.gfpganer = None
-       
+
         if face_enhancement:
             from ppgan.faceutils.face_enhancement import FaceEnhancement
+
             self.faceenhancer = FaceEnhancement(batch_size=batch_size)
         self.detection_func = upscale_detections
         self.preprocessing = preprocessing
         self.face_alignment = face_align
-     
 
     def read_img(self, path):
         img = imageio.imread(path)
@@ -257,37 +266,39 @@ class FirstOrderPredictor(BasePredictor):
                 dim = (int(r * w), 1024)
             else:
                 r = 1024.0 / w
-                dim = (1024, int(r*h))
+                dim = (1024, int(r * h))
             img = cv2.resize(img, dim)
         return img
+
     def _add_border(self, image, ssize, border):
         image = imutils.resize(image, width=ssize[0], height=ssize[1])
         if image.shape[0] > border.shape[0]:
-            pad = (image.shape[0] - border.shape[0]) // 2 
-            image = image[pad:-pad,:]
+            pad = (image.shape[0] - border.shape[0]) // 2
+            image = image[pad:-pad, :]
         elif image.shape[1] > border.shape[1]:
             pad = (image.shape[1] - border.shape[1]) // 2
             image = image[:, pad:-pad]
 
         h, w = image.shape[:2]
-        border = cv2.resize(border, (w,h))
+        border = cv2.resize(border, (w, h))
         image = Image.fromarray(image)
         border = Image.fromarray(border)
-        
+
         image.paste(border, mask=border)
         return image
-        
-    def _decorate_frame(self, image, effect):    
-        return bm.screen(cv2.cvtColor(image, cv2.COLOR_RGB2RGBA).astype(np.float32), effect, 1.).astype(np.uint8)
+
+    def _decorate_frame(self, image, effect):
+        return bm.screen(
+            cv2.cvtColor(image, cv2.COLOR_RGB2RGBA).astype(np.float32), effect, 1.0
+        ).astype(np.uint8)
 
     def _decorate(self, image, dim, effect=None, border=None):
-        image = self._decorate_frame(image, effect) 
+        image = self._decorate_frame(image, effect)
         return self._add_border(image, dim, border)
-
 
     def _define_effects(self, frame_shape, effects, borders):
         h, w = frame_shape
-        key = "landscape" if w > h+20 else "portrait" if h > w + 20 else "square"
+        key = "landscape" if w > h + 20 else "portrait" if h > w + 20 else "square"
         border = cv2.cvtColor(cv2.imread(borders[key], -1), cv2.COLOR_BGR2RGBA)
         hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_BGR2RGBA)
         desired_height, desired_width = border.shape[:2]
@@ -296,61 +307,180 @@ class FirstOrderPredictor(BasePredictor):
         elif key == "portrait":
             return (desired_width, None), border, hover
         else:
-            return (desired_width, desired_height), border, hover    
-        
+            return (desired_width, desired_height), border, hover
+
     def decorate(self, frames, decoration):
         frame_shape = frames[0].shape[:2]
-        borders = decoration['borders']
-        effects = decoration['hovers']
-        dim, border, hover = self._define_effects(frame_shape, effects, borders) 
+        borders = decoration["borders"]
+        effects = decoration["hovers"]
+        dim, border, hover = self._define_effects(frame_shape, effects, borders)
         h, w = frame_shape
-        hover = cv2.resize(hover, (w,h)).astype(np.float32)          
-        return  [self._decorate(frame, dim, hover, border) for frame in tqdm(frames)]
+        hover = cv2.resize(hover, (w, h)).astype(np.float32)
+        return [self._decorate(frame, dim, hover, border) for frame in tqdm(frames)]
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
         if audio is None:
-            imageio.mimsave(os.path.join(self.output, self.filename),
-                            [np.array(frame) for frame in out_frame],
-                            fps=fps)
+            imageio.mimsave(
+                os.path.join(self.output, self.filename),
+                [np.array(frame) for frame in out_frame],
+                fps=fps,
+            )
         else:
             audio_background = mp.AudioFileClip(audio)
-            #if audio.endswith(".mp3"):
+            # if audio.endswith(".mp3"):
             #    audio_background = mp.AudioFileClip(audio)
-            #elif audio.endswith(".mp4"):
+            # elif audio.endswith(".mp4"):
             #    audio_background = mp.VideoFileClip(audio)
-            #    audio_background = audio_background.audio 
-            temp = 'tmp.mp4'
-            imageio.mimsave(temp,
-                           [np.array(frame) for frame in out_frame],
-                            fps=fps)
+            #    audio_background = audio_background.audio
+            temp = "tmp.mp4"
+            imageio.mimsave(temp, [np.array(frame) for frame in out_frame], fps=fps)
             videoclip_2 = mp.VideoFileClip(temp)
-            if audio_background.duration > videoclip_2.duration: 
+            if audio_background.duration > videoclip_2.duration:
                 audio_background = audio_background.subclip(0, videoclip_2.duration)
-            videoclip_2.set_audio(audio_background).write_videofile(os.path.join(self.output, self.filename),
-                                                            audio_codec="aac")
+            videoclip_2.set_audio(audio_background).write_videofile(
+                os.path.join(self.output, self.filename), audio_codec="aac"
+            )
             os.remove(temp)
 
+    def process_image(self, source_image, driving_videos, audio=None, decoration=None):
+
+        img = np.array(source_image)
+        if img.ndim == 2:
+            img = np.expand_dims(img, axis=2)
+        # som images have 4 channels
+        if img.shape[2] > 3:
+            img = img[:, :, :3]
+        h, w, _ = img.shape
+        if h >= 1024 or w >= 1024:
+            if h > w:
+                r = 1024.0 / h
+                dim = (int(r * w), 1024)
+            else:
+                r = 1024.0 / w
+                dim = (1024, int(r * h))
+            img = cv2.resize(img, dim)
+
+        def get_prediction(face_image, driving_video):
+            predictions = self.make_animation(
+                face_image,
+                driving_video,
+                self.generator,
+                self.kp_detector,
+                relative=self.relative,
+                adapt_movement_scale=self.adapt_scale,
+            )
+            return predictions
+
+        results = []
+        bboxes = self.extract_bbox(img.copy())
+        # bboxes, coords = self.extract_bbox(img.copy())
+        print(str(len(bboxes)) + " persons have been detected")
+        areas = [x[4] for x in bboxes]
+        indices = np.argsort(areas)
+        bboxes = bboxes[indices]
+        # coords = coords[indices]
+
+        original_shape = img.shape[:2]
+        if self.gfpganer:
+            _, _, img = self.gfpganer.enhance(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        bboxes[:, :4] = scale_bboxes(
+            original_shape, bboxes[:, :4].astype(np.float64), img.shape
+        ).round()
+
+        image_videos = []
+        for driving_video in driving_videos[: len(bboxes)]:
+            fps = driving_video["fps"]
+
+            try:
+                driving_video["frames"] = [
+                    cv2.resize(im, (self.image_size, self.image_size)) / 255.0
+                    for im in driving_video["frames"]
+                ]
+            except RuntimeError:
+                print("Read driving video error!")
+                pass
+
+            image_videos.append(driving_video)
+
+        bbox2video = {}
+        if len(bboxes) <= len(image_videos):
+            bbox2video = {i: i for i in range(len(bboxes))}
+        else:
+            pool = cycle(range(len(image_videos)))
+            bbox2video = {i: next(pool) for i in range(len(bboxes))}
+
+        for i, rec in enumerate(bboxes):
+            face_image = source_image.copy()[rec[1] : rec[3], rec[0] : rec[2]]
+            face_image = (
+                cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
+            )
+            predictions = get_prediction(face_image, image_videos[bbox2video[i]])
+            results.append(
+                {
+                    "rec": rec,
+                    "predict": [predictions[i] for i in range(predictions.shape[0])],
+                }
+            )
+            if len(bboxes) == 1 or not self.multi_person:
+                break
+
+        out_frame = []
+
+        box_masks = self.extract_masks(bboxes, source_image)
+
+        patch = np.zeros(source_image.shape).astype("uint8")
+        mask = np.zeros(source_image.shape[:2]).astype("uint8")
+
+        for i in trange(max([len(i) for i in image_videos])):
+            frame = source_image.copy()
+
+            for j, result in enumerate(results):
+                x1, y1, x2, y2, _ = result["rec"]
+
+                if i >= len(result["predict"]):
+                    pass
+                else:
+                    out = result["predict"][i]
+                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
+
+                    if len(results) == 1:
+                        frame[y1:y2, x1:x2] = out
+                        break
+                    else:
+                        patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
+
+                        mask[y1:y2, x1:x2] = box_masks[j]
+                    frame = cv2.copyTo(patch, mask, frame)
+
+            out_frame.append(frame)
+            patch[:, :, :] = 0
+            mask[:, :] = 0
+
+        self.write_with_audio(None, out_frame, fps, decoration)
 
     def run(self, source_image, driving_videos_paths, filename, audio, decoration=None):
-         
+
         self.filename = filename
         # videoclip_1 = mp.VideoFileClip(driving_video)
         # audio = videoclip_1.audio
-        
+
         def get_prediction(face_image, driving_video):
             predictions = self.make_animation(
-                    face_image,
-                    driving_video,
-                    self.generator,
-                    self.kp_detector,
-                    relative=self.relative,
-                    adapt_movement_scale=self.adapt_scale)
+                face_image,
+                driving_video,
+                self.generator,
+                self.kp_detector,
+                relative=self.relative,
+                adapt_movement_scale=self.adapt_scale,
+            )
             return predictions
 
         source_image = self.read_img(source_image)
-      
+
         results = []
         bboxes = self.extract_bbox(source_image.copy())
         # bboxes, coords = self.extract_bbox(source_image.copy())
@@ -370,20 +500,26 @@ class FirstOrderPredictor(BasePredictor):
         bboxes[:, :4] = scale_bboxes(
             original_shape, bboxes[:, :4].astype(np.float64), source_image.shape
         ).round()
-       
+
         if isinstance(driving_videos_paths, str):
             if Path(driving_videos_paths).is_file():
                 driving_videos_paths = [driving_videos_paths]
             elif Path(driving_videos_paths).is_dir():
-                driving_videos_paths = [str(filepath.absolute()) for filepath in Path(driving_videos_paths).glob('**/*.mp4')]
+                driving_videos_paths = [
+                    str(filepath.absolute())
+                    for filepath in Path(driving_videos_paths).glob("**/*.mp4")
+                ]
 
         driving_videos = []
-        for driving_video in driving_videos_paths[:len(bboxes)]:
+        for driving_video in driving_videos_paths[: len(bboxes)]:
             reader = imageio.get_reader(driving_video)
-            fps = reader.get_meta_data()['fps']
-            
+            fps = reader.get_meta_data()["fps"]
+
             try:
-                driving_video = [cv2.resize(im, (self.image_size, self.image_size)) / 255.0  for im in reader]
+                driving_video = [
+                    cv2.resize(im, (self.image_size, self.image_size)) / 255.0
+                    for im in reader
+                ]
             except RuntimeError:
                 print("Read driving video error!")
                 pass
@@ -399,104 +535,117 @@ class FirstOrderPredictor(BasePredictor):
             bbox2video = {i: next(pool) for i in range(len(bboxes))}
 
         for i, rec in enumerate(bboxes):
-            face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
-            face_image = cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
+            face_image = source_image.copy()[rec[1] : rec[3], rec[0] : rec[2]]
+            face_image = (
+                cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
+            )
             predictions = get_prediction(face_image, driving_videos[bbox2video[i]])
-            results.append({'rec': rec, 'predict': [predictions[i] for i in range(predictions.shape[0])]})
+            results.append(
+                {
+                    "rec": rec,
+                    "predict": [predictions[i] for i in range(predictions.shape[0])],
+                }
+            )
             if len(bboxes) == 1 or not self.multi_person:
                 break
-        
+
         out_frame = []
 
-        
         box_masks = self.extract_masks(bboxes, source_image)
-       
-        
-        patch = np.zeros(source_image.shape).astype('uint8')
-        mask = np.zeros(source_image.shape[:2]).astype('uint8')
-        
+
+        patch = np.zeros(source_image.shape).astype("uint8")
+        mask = np.zeros(source_image.shape[:2]).astype("uint8")
+
         for i in trange(max([len(i) for i in driving_videos])):
             frame = source_image.copy()
 
-            for j, result  in enumerate(results):
-                x1, y1, x2, y2, _ = result['rec']
-                
-                if i >= len(result['predict']):
+            for j, result in enumerate(results):
+                x1, y1, x2, y2, _ = result["rec"]
+
+                if i >= len(result["predict"]):
                     pass
                 else:
-                    out = result['predict'][i]
-                    out = cv2.resize(out.astype(np.uint8), (x2-x1, y2-y1))
-        
+                    out = result["predict"][i]
+                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
+
                     if len(results) == 1:
                         frame[y1:y2, x1:x2] = out
                         break
-                    else: 
-                        patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)]*3)
-                        
+                    else:
+                        patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
+
                         mask[y1:y2, x1:x2] = box_masks[j]
                     frame = cv2.copyTo(patch, mask, frame)
-             
+
             out_frame.append(frame)
             patch[:, :, :] = 0
-            mask[:, :] = 0            
+            mask[:, :] = 0
 
-        
-    
         self.write_with_audio(None, out_frame, fps, decoration)
-        
-
 
     def load_checkpoints(self, config, checkpoint_path):
 
         generator = OcclusionAwareGenerator(
-            **config['model']['generator']['generator_cfg'],
-            **config['model']['common_params'], inference=True)
+            **config["model"]["generator"]["generator_cfg"],
+            **config["model"]["common_params"],
+            inference=True
+        )
 
         kp_detector = KPDetector(
-            **config['model']['generator']['kp_detector_cfg'],
-            **config['model']['common_params'])
+            **config["model"]["generator"]["kp_detector_cfg"],
+            **config["model"]["common_params"]
+        )
 
         checkpoint = paddle.load(self.weight_path)
-        generator.set_state_dict(checkpoint['generator'])
+        generator.set_state_dict(checkpoint["generator"])
 
-        kp_detector.set_state_dict(checkpoint['kp_detector'])
+        kp_detector.set_state_dict(checkpoint["kp_detector"])
 
         generator.eval()
         kp_detector.eval()
 
         return generator, kp_detector
 
-    def make_animation(self,
-                       source_image,
-                       driving_video,
-                       generator,
-                       kp_detector,
-                       relative=True,
-                       adapt_movement_scale=True):
+    def make_animation(
+        self,
+        source_image,
+        driving_video,
+        generator,
+        kp_detector,
+        relative=True,
+        adapt_movement_scale=True,
+    ):
         with paddle.no_grad():
-      
 
-            
             predictions = []
-            source = paddle.to_tensor(source_image[np.newaxis].astype(
-                np.float32)).transpose([0, 3, 1, 2])
+            source = paddle.to_tensor(
+                source_image[np.newaxis].astype(np.float32)
+            ).transpose([0, 3, 1, 2])
             kp_source = kp_detector(source)
             kp_source_batch = {}
-            kp_source_batch["value"] = paddle.tile(kp_source["value"], repeat_times=[self.batch_size, 1, 1])
-            kp_source_batch["jacobian"] = paddle.tile(kp_source["jacobian"], repeat_times=[self.batch_size, 1, 1, 1])
+            kp_source_batch["value"] = paddle.tile(
+                kp_source["value"], repeat_times=[self.batch_size, 1, 1]
+            )
+            kp_source_batch["jacobian"] = paddle.tile(
+                kp_source["jacobian"], repeat_times=[self.batch_size, 1, 1, 1]
+            )
             source = paddle.tile(source, repeat_times=[self.batch_size, 1, 1, 1])
 
             driving = paddle.to_tensor(
-                np.array(driving_video[:1]).astype(
-                    np.float32)).transpose([0, 3, 1, 2])
+                np.array(driving_video[:1]).astype(np.float32)
+            ).transpose([0, 3, 1, 2])
             kp_driving_initial = kp_detector(driving[:1])
-            
+
             begin_idx = 0
-            for _ in tqdm(range(int(np.ceil(float(len(driving_video)) / self.batch_size)))):
+            for _ in tqdm(
+                range(int(np.ceil(float(len(driving_video)) / self.batch_size)))
+            ):
                 frame_num = min(self.batch_size, len(driving_video) - begin_idx)
                 driving = paddle.to_tensor(
-                    np.array(driving_video[begin_idx:begin_idx + frame_num]).astype(
-                    np.float32)).transpose([0, 3, 1, 2])
+                    np.array(driving_video[begin_idx : begin_idx + frame_num]).astype(
+                        np.float32
+                    )
+                ).transpose([0, 3, 1, 2])
 
                 # driving_frame = driving[begin_idx: begin_idx + frame_num]
                 kp_driving = kp_detector(driving)
@@ -510,46 +659,52 @@ class FirstOrderPredictor(BasePredictor):
                     kp_driving_initial=kp_driving_initial,
                     use_relative_movement=relative,
                     use_relative_jacobian=relative,
-                    adapt_movement_scale=adapt_movement_scale)
+                    adapt_movement_scale=adapt_movement_scale,
+                )
 
-                out = generator(source[0:frame_num], kp_source=kp_source_img, kp_driving=kp_norm)
-                img = np.transpose(out['prediction'].numpy(), [0, 2, 3, 1]) * 255.0
+                out = generator(
+                    source[0:frame_num], kp_source=kp_source_img, kp_driving=kp_norm
+                )
+                img = np.transpose(out["prediction"].numpy(), [0, 2, 3, 1]) * 255.0
                 if self.face_enhancement:
-                #     _, _, img = self.faceenhancer.enhance(img[0])
+                    #     _, _, img = self.faceenhancer.enhance(img[0])
                     img = self.faceenhancer.enhance_from_batch(img)
                 predictions.append(img)
                 begin_idx += frame_num
         return np.concatenate(predictions)
 
-
     def extract_bbox(self, image):
         detector = face_detection.FaceAlignment(
             face_detection.LandmarksType._2D,
             flip_input=False,
-            face_detector=self.face_detector)
+            face_detector=self.face_detector,
+        )
 
         # frame = [image]
         predictions = detector.get_detections_for_image(np.array(image))
-        predictions = list(filter(lambda x: ((x[3]-x[1])*(x[2]-x[0])) > 1000, predictions))
+        predictions = list(
+            filter(lambda x: ((x[3] - x[1]) * (x[2] - x[0])) > 1000, predictions)
+        )
         # result, coords = self.detection_func(image, predictions)
 
         h, w, _ = image.shape
         predictions = self.detection_func(predictions, (0, 0, w, h))
         # predictions = list(map(lambda x: compute_aspect_preserved_bbox(x, image.shape[:2], 0.3), predictions))
-        
+
         # return np.array(result), np.array(coords)
         return np.array(predictions)
-
 
     def extract_masks(self, bboxes, source_image):
         if len(bboxes) == 1:
             return
         box_masks = []
         for i, rec in enumerate(bboxes):
-            face_image = source_image.copy()[rec[1]:rec[3], rec[0]:rec[2]]
+            face_image = source_image.copy()[rec[1] : rec[3], rec[0] : rec[2]]
             out = self.solov2.predict(image=[face_image.copy()])
             if out["segm"][0].shape != face_image.shape[:2]:
-                out["segm"] = np.resize(out["segm"], (out["segm"].shape[0], *face_image.shape[:2]))
+                out["segm"] = np.resize(
+                    out["segm"], (out["segm"].shape[0], *face_image.shape[:2])
+                )
             center = face_image.shape[0] // 2, face_image.shape[1] // 2
             mask = self.extract_mask(out, center)
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 15))
@@ -557,11 +712,10 @@ class FirstOrderPredictor(BasePredictor):
             box_masks.append(mask)
         return box_masks
 
-
     def extract_mask(
         self,
         result,
-        center, 
+        center,
         threshold=0.4,
     ):
         shape = result["segm"][0].shape
@@ -571,9 +725,9 @@ class FirstOrderPredictor(BasePredictor):
 
         idx = result["score"][idx] >= 0.3
         result["segm"] = result["segm"][idx]
-        
+
         if result["segm"].shape[0] > 0:
-            #mask_idx = np.argmax(result["segm"].sum(axis=2).sum(axis=1))
+            # mask_idx = np.argmax(result["segm"].sum(axis=2).sum(axis=1))
             mask_idx = -1
             for i, mask in enumerate(result["segm"]):
                 if mask[center[0], center[1]]:
@@ -581,6 +735,5 @@ class FirstOrderPredictor(BasePredictor):
             mask = result["segm"][mask_idx]
         else:
             mask = np.zeros(shape)
-        
+
         return mask
-        
