@@ -392,7 +392,7 @@ class FirstOrderPredictor(BasePredictor):
         ).round()
 
         image_videos = []
-        for driving_video in driving_videos[: len(bboxes)]:
+        for driving_video in driving_videos[:len(bboxes)]:
             fps = driving_video["fps"]
 
             try:
