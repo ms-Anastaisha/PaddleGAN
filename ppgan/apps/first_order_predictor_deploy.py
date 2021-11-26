@@ -435,7 +435,7 @@ class FirstOrderPredictor(BasePredictor):
         patch = np.zeros(img.shape).astype("uint8")
         mask = np.zeros(img.shape[:2]).astype("uint8")
 
-        for i in trange(max([len(i) for i in image_videos])):
+        for i in trange(max([len(i['frames']) for i in image_videos])):
             frame = img.copy()
 
             for j, result in enumerate(results):
