@@ -418,7 +418,7 @@ class FirstOrderPredictor(BasePredictor):
             face_image = (
                 cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
             )
-            predictions = get_prediction(face_image, image_videos[bbox2video[i]])
+            predictions = get_prediction(face_image, image_videos[bbox2video[i]]['frames'])
             results.append(
                 {
                     "rec": rec,
