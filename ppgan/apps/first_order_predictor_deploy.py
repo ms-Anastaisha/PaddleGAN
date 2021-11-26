@@ -414,7 +414,7 @@ class FirstOrderPredictor(BasePredictor):
             bbox2video = {i: next(pool) for i in range(len(bboxes))}
 
         for i, rec in enumerate(bboxes):
-            face_image = source_image.copy()[rec[1] : rec[3], rec[0] : rec[2]]
+            face_image = img.copy()[rec[1] : rec[3], rec[0] : rec[2]]
             face_image = (
                 cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
             )
@@ -430,13 +430,13 @@ class FirstOrderPredictor(BasePredictor):
 
         out_frame = []
 
-        box_masks = self.extract_masks(bboxes, source_image)
+        box_masks = self.extract_masks(bboxes, img)
 
-        patch = np.zeros(source_image.shape).astype("uint8")
-        mask = np.zeros(source_image.shape[:2]).astype("uint8")
+        patch = np.zeros(img.shape).astype("uint8")
+        mask = np.zeros(img.shape[:2]).astype("uint8")
 
         for i in trange(max([len(i) for i in image_videos])):
-            frame = source_image.copy()
+            frame = img.copy()
 
             for j, result in enumerate(results):
                 x1, y1, x2, y2, _ = result["rec"]
