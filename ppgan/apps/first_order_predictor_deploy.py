@@ -463,7 +463,7 @@ class FirstOrderPredictor(BasePredictor):
             patch[:, :, :] = 0
             mask[:, :] = 0
 
-        self.write_with_audio(None, out_frame, fps, decoration)
+        self.write_with_audio(audio, out_frame, fps, decoration)
 
     def run(self, source_image, driving_videos_paths, filename, audio, decoration=None):
 
