@@ -177,7 +177,6 @@ class FirstOrderPredictor(BasePredictor):
         self.preprocessing = preprocessing
         self.face_alignment = face_align
      
-
     def read_img(self, path):
         img = imageio.imread(path)
         if img.ndim == 2:
@@ -196,20 +195,10 @@ class FirstOrderPredictor(BasePredictor):
                 dim = (1024, int(r*h))
             img = cv2.resize(img, dim)
         return img
-    def _add_border(self, image, ssize, border):
-        image = imutils.resize(image, width=ssize[0], height=ssize[1])
-        if image.shape[0] > border.shape[0]:
-            pad = (image.shape[0] - border.shape[0]) // 2 
-            image = image[pad:-pad,:]
-        elif image.shape[1] > border.shape[1]:
-            pad = (image.shape[1] - border.shape[1]) // 2
-            image = image[:, pad:-pad]
 
-        h, w = image.shape[:2]
-        border = cv2.resize(border, (w,h))
+    def _add_border(self, image, border):
         image = Image.fromarray(image)
         border = Image.fromarray(border)
-        
         image.paste(border, mask=border)
         return image
         
@@ -219,7 +208,6 @@ class FirstOrderPredictor(BasePredictor):
     def _decorate(self, image, dim, effect=None, border=None):
         image = self._decorate_frame(image, effect) 
         return self._add_border(image, dim, border)
-
 
     def _define_effects(self, frame_shape, effects, borders):
         h, w = frame_shape
@@ -240,8 +228,29 @@ class FirstOrderPredictor(BasePredictor):
         effects = decoration['hovers']
         dim, border, hover = self._define_effects(frame_shape, effects, borders) 
         h, w = frame_shape
-        hover = cv2.resize(hover, (w,h)).astype(np.float32)          
-        return  [self._decorate(frame, dim, hover, border) for frame in tqdm(frames)]
+
+        orientation = "landscape" if w > h + 20 else "portrait" if h > w + 20 else "square"
+        hover = cv2.resize(hover, (w, h)).astype(np.float32)
+
+        t = tqdm(frames, desc="Adding hovers to video", leave=True)
+        frames = [self._decorate_frame(frame, hover) for frame in t]
+ 
+        if orientation == "landscape":
+            border = imutils.resize(border, width=None, height=h)
+            frames = self.fit_frames_to_landscape(np.array(frames), border)
+        elif orientation == "portrait":
+            border = imutils.resize(border, width=w, height=None)
+            frames = self.fit_frames_to_portrait(np.array(frames), border)
+        else:
+            border = imutils.resize(border, width=w, height=h)
+            frames = np.array(frames)
+
+        if frames[0].shape[:2] != border.shape[:2]:
+            border = cv2.resize(border, (frames[0].shape[1], frames[0].shape[0]), interpolation=cv2.INTER_AREA)
+
+        t = trange(frames.shape[0], desc="Adding borders to video", leave=True)
+        frames = [self._add_border(frames[i], border) for i in t]
+        return frames
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
         if decoration is not None:
@@ -377,10 +386,9 @@ class FirstOrderPredictor(BasePredictor):
             mask[:, :] = 0            
 
         
-    
-        self.write_with_audio(None, out_frame, fps, decoration)
-        
 
+        self.write_with_audio(audio, out_frame, fps, decoration)
+        
 
     def load_checkpoints(self, config, checkpoint_path):
 
@@ -519,4 +527,27 @@ class FirstOrderPredictor(BasePredictor):
             mask = np.zeros(shape)
         
         return mask
-        
+
+
+    def fit_frames_to_landscape(self, frames, border):
+        pad = (frames[0].shape[1] - border.shape[1]) // 2
+        if pad > 0:
+            frames = frames[:, :, pad:-pad]
+        elif pad < 0:
+            frames = list(frames)
+            for i in trange(len(frames)):
+                frames[i] = cv2.copyMakeBorder(frames[i], 0, 0, abs(pad), abs(pad), cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            frames = np.array(frames)
+        return frames
+
+
+    def fit_frames_to_portrait(self, frames, border):  
+        pad = (frames[0].shape[0] - border.shape[0]) // 2
+        if pad > 0:
+            frames = frames[:, pad:-pad, :]
+        elif pad < 0:
+            frames = list(frames)
+            for i in trange(len(frames)):
+                frames[i] = cv2.copyMakeBorder(frames[i], abs(pad), abs(pad), 0, 0, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            frames = np.array(frames)
+        return frames
