@@ -246,7 +246,6 @@ class FirstOrderPredictor(BasePredictor):
 
         if face_enhancement:
             from ppgan.faceutils.face_enhancement import FaceEnhancement
-
             self.faceenhancer = FaceEnhancement(batch_size=batch_size)
         self.detection_func = upscale_detections
         self.preprocessing = preprocessing
@@ -271,22 +270,20 @@ class FirstOrderPredictor(BasePredictor):
             img = cv2.resize(img, dim)
         return img
 
-    def _add_border(self, image, ssize, border):
-        image = imutils.resize(image, width=ssize[0], height=ssize[1])
-        if image.shape[0] > border.shape[0]:
-            pad = (image.shape[0] - border.shape[0]) // 2
-            image = image[pad:-pad, :]
-        elif image.shape[1] > border.shape[1]:
-            pad = (image.shape[1] - border.shape[1]) // 2
-            image = image[:, pad:-pad]
-
-        h, w = image.shape[:2]
-        border = cv2.resize(border, (w, h))
+    def _add_border(self, image, border):
         image = Image.fromarray(image)
         border = Image.fromarray(border)
-
         image.paste(border, mask=border)
         return image
+
+    def hover_frames_simplified(self, frames, hover):
+        t = trange(frames.shape[0], desc="Adding hovers to video", leave=True)
+        for i in t:
+            img_in_norm = frames[i] * (1/255.0)
+            comp = 1.0 - (1.0 - img_in_norm[:, :, :3]) * (1.0 - hover[:, :, :3])
+            frames[i][..., :3] = comp
+            frames[i] *= 255.0
+        return frames
 
     def _decorate_frame(self, image, effect):
         return bm.screen(
@@ -301,7 +298,10 @@ class FirstOrderPredictor(BasePredictor):
         h, w = frame_shape
         key = "landscape" if w > h + 20 else "portrait" if h > w + 20 else "square"
         border = cv2.cvtColor(cv2.imread(borders[key], -1), cv2.COLOR_BGR2RGBA)
-        hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_BGR2RGBA)
+        if effects is not None:
+            hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_BGR2RGBA)
+        else:
+            hover = None
         desired_height, desired_width = border.shape[:2]
         if key == "landscape":
             return (None, desired_height), border, hover
@@ -313,11 +313,51 @@ class FirstOrderPredictor(BasePredictor):
     def decorate(self, frames, decoration):
         frame_shape = frames[0].shape[:2]
         borders = decoration["borders"]
-        effects = decoration["hovers"]
+        if ("hovers" in decoration.keys()) and (decoration["hovers"] is not None):
+            effects = decoration["hovers"]
+        else:
+            effects = None
+
         dim, border, hover = self._define_effects(frame_shape, effects, borders)
         h, w = frame_shape
-        hover = cv2.resize(hover, (w, h)).astype(np.float32)
-        return [self._decorate(frame, dim, hover, border) for frame in tqdm(frames)]
+
+        orientation = (
+            "landscape" if w > h + 20 else "portrait" if h > w + 20 else "square"
+        )
+
+        if hover is not None:
+            hover = cv2.resize(hover, (w, h)).astype(np.float32)
+
+            # default hover
+            # t = tqdm(frames, desc="Adding hovers to video", leave=True)
+            # frames = [self._decorate_frame(frame, hover) for frame in t]
+
+            # simplified hover
+            hover *= (1/255.0)
+            frames = np.array(frames).astype(np.float32)
+            frames = self.hover_frames_simplified(frames, hover[..., :3])
+            frames = frames.astype(np.uint8)
+
+        if orientation == "landscape":
+            border = imutils.resize(border, width=None, height=h)
+            frames = self.fit_frames_to_landscape(np.array(frames), border)
+        elif orientation == "portrait":
+            border = imutils.resize(border, width=w, height=None)
+            frames = self.fit_frames_to_portrait(np.array(frames), border)
+        else:
+            border = imutils.resize(border, width=w, height=h)
+            frames = np.array(frames)
+
+        if frames[0].shape[:2] != border.shape[:2]:
+            border = cv2.resize(
+                border,
+                (frames[0].shape[1], frames[0].shape[0]),
+                interpolation=cv2.INTER_AREA,
+            )
+
+        t = trange(frames.shape[0], desc="Adding borders to video", leave=True)
+        frames = [self._add_border(frames[i], border) for i in t]
+        return frames
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
         if decoration is not None:
@@ -330,11 +370,6 @@ class FirstOrderPredictor(BasePredictor):
             )
         else:
             audio_background = mp.AudioFileClip(audio)
-            # if audio.endswith(".mp3"):
-            #    audio_background = mp.AudioFileClip(audio)
-            # elif audio.endswith(".mp4"):
-            #    audio_background = mp.VideoFileClip(audio)
-            #    audio_background = audio_background.audio
             temp = "tmp.mp4"
             imageio.mimsave(temp, [np.array(frame) for frame in out_frame], fps=fps)
             videoclip_2 = mp.VideoFileClip(temp)
@@ -344,126 +379,6 @@ class FirstOrderPredictor(BasePredictor):
                 os.path.join(self.output, self.filename), audio_codec="aac"
             )
             os.remove(temp)
-
-    def process_image(self, source_image, driving_videos, audio=None, decoration=None):
-
-        driving_videos = deepcopy(driving_videos)
-
-        img = np.array(source_image)
-        if img.ndim == 2:
-            img = np.expand_dims(img, axis=2)
-        # som images have 4 channels
-        if img.shape[2] > 3:
-            img = img[:, :, :3]
-        h, w, _ = img.shape
-        if h >= 1024 or w >= 1024:
-            if h > w:
-                r = 1024.0 / h
-                dim = (int(r * w), 1024)
-            else:
-                r = 1024.0 / w
-                dim = (1024, int(r * h))
-            img = cv2.resize(img, dim)
-
-        def get_prediction(face_image, driving_video):
-            predictions = self.make_animation(
-                face_image,
-                driving_video,
-                self.generator,
-                self.kp_detector,
-                relative=self.relative,
-                adapt_movement_scale=self.adapt_scale,
-            )
-            return predictions
-
-        results = []
-        bboxes = self.extract_bbox(img.copy())
-        # bboxes, coords = self.extract_bbox(img.copy())
-        print(str(len(bboxes)) + " persons have been detected")
-        areas = [x[4] for x in bboxes]
-        indices = np.argsort(areas)
-        bboxes = bboxes[indices]
-        # coords = coords[indices]
-
-        original_shape = img.shape[:2]
-        if self.gfpganer:
-            _, _, img = self.gfpganer.enhance(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        bboxes[:, :4] = scale_bboxes(
-            original_shape, bboxes[:, :4].astype(np.float64), img.shape
-        ).round()
-
-        image_videos = []
-        for driving_video in driving_videos[:len(bboxes)]:
-            fps = driving_video["fps"]
-
-            try:
-                driving_video["frames"] = [
-                    cv2.resize(im, (self.image_size, self.image_size)) / 255.0
-                    for im in driving_video["frames"]
-                ]
-            except RuntimeError:
-                print("Read driving video error!")
-                pass
-
-            image_videos.append(driving_video)
-
-        bbox2video = {}
-        if len(bboxes) <= len(image_videos):
-            bbox2video = {i: i for i in range(len(bboxes))}
-        else:
-            pool = cycle(range(len(image_videos)))
-            bbox2video = {i: next(pool) for i in range(len(bboxes))}
-
-        for i, rec in enumerate(bboxes):
-            face_image = img.copy()[rec[1] : rec[3], rec[0] : rec[2]]
-            face_image = (
-                cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
-            )
-            predictions = get_prediction(face_image, image_videos[bbox2video[i]]['frames'])
-            results.append(
-                {
-                    "rec": rec,
-                    "predict": [predictions[i] for i in range(predictions.shape[0])],
-                }
-            )
-            if len(bboxes) == 1 or not self.multi_person:
-                break
-
-        out_frame = []
-
-        box_masks = self.extract_masks(bboxes, img)
-
-        patch = np.zeros(img.shape).astype("uint8")
-        mask = np.zeros(img.shape[:2]).astype("uint8")
-
-        for i in trange(max([len(i['frames']) for i in image_videos])):
-            frame = img.copy()
-
-            for j, result in enumerate(results):
-                x1, y1, x2, y2, _ = result["rec"]
-
-                if i >= len(result["predict"]):
-                    pass
-                else:
-                    out = result["predict"][i]
-                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
-
-                    if len(results) == 1:
-                        frame[y1:y2, x1:x2] = out
-                        break
-                    else:
-                        patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
-
-                        mask[y1:y2, x1:x2] = box_masks[j]
-                    frame = cv2.copyTo(patch, mask, frame)
-
-            out_frame.append(frame)
-            patch[:, :, :] = 0
-            mask[:, :] = 0
-
-        self.write_with_audio(audio, out_frame, fps, decoration)
 
     def run(self, source_image, driving_videos_paths, filename, audio, decoration=None):
 
@@ -584,7 +499,7 @@ class FirstOrderPredictor(BasePredictor):
             patch[:, :, :] = 0
             mask[:, :] = 0
 
-        self.write_with_audio(None, out_frame, fps, decoration)
+        self.write_with_audio(audio, out_frame, fps, decoration)
 
     def load_checkpoints(self, config, checkpoint_path):
 
@@ -683,18 +598,13 @@ class FirstOrderPredictor(BasePredictor):
             face_detector=self.face_detector,
         )
 
-        # frame = [image]
         predictions = detector.get_detections_for_image(np.array(image))
         predictions = list(
             filter(lambda x: ((x[3] - x[1]) * (x[2] - x[0])) > 1000, predictions)
         )
-        # result, coords = self.detection_func(image, predictions)
-
         h, w, _ = image.shape
         predictions = self.detection_func(predictions, (0, 0, w, h))
         # predictions = list(map(lambda x: compute_aspect_preserved_bbox(x, image.shape[:2], 0.3), predictions))
-
-        # return np.array(result), np.array(coords)
         return np.array(predictions)
 
     def extract_masks(self, bboxes, source_image):
@@ -740,3 +650,41 @@ class FirstOrderPredictor(BasePredictor):
             mask = np.zeros(shape)
 
         return mask
+
+    def fit_frames_to_landscape(self, frames, border):
+        pad = (frames[0].shape[1] - border.shape[1]) // 2
+        if pad > 0:
+            frames = frames[:, :, pad:-pad]
+        elif pad < 0:
+            frames = list(frames)
+            for i in trange(len(frames)):
+                frames[i] = cv2.copyMakeBorder(
+                    frames[i],
+                    0,
+                    0,
+                    abs(pad),
+                    abs(pad),
+                    cv2.BORDER_CONSTANT,
+                    value=[255, 255, 255],
+                )
+            frames = np.array(frames)
+        return frames
+
+    def fit_frames_to_portrait(self, frames, border):
+        pad = (frames[0].shape[0] - border.shape[0]) // 2
+        if pad > 0:
+            frames = frames[:, pad:-pad, :]
+        elif pad < 0:
+            frames = list(frames)
+            for i in trange(len(frames)):
+                frames[i] = cv2.copyMakeBorder(
+                    frames[i],
+                    abs(pad),
+                    abs(pad),
+                    0,
+                    0,
+                    cv2.BORDER_CONSTANT,
+                    value=[255, 255, 255],
+                )
+            frames = np.array(frames)
+        return frames
