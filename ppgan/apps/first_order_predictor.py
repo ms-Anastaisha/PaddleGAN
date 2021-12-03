@@ -213,7 +213,10 @@ class FirstOrderPredictor(BasePredictor):
         h, w = frame_shape
         key = "landscape" if w > h+20 else "portrait" if h > w + 20 else "square"
         border = cv2.cvtColor(cv2.imread(borders[key], -1), cv2.COLOR_BGR2RGBA)
-        hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_BGR2RGBA)
+        if effects is not None:
+            hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_BGR2RGBA)
+        else: 
+            hover = None
         desired_height, desired_width = border.shape[:2]
         if key == "landscape":
             return (None, desired_height), border, hover
@@ -225,15 +228,20 @@ class FirstOrderPredictor(BasePredictor):
     def decorate(self, frames, decoration):
         frame_shape = frames[0].shape[:2]
         borders = decoration['borders']
-        effects = decoration['hovers']
+        if ("hovers" in decoration.keys()) and (decoration["hovers"] is not None):
+            effects = decoration["hovers"]
+        else:
+            effects = None
+
         dim, border, hover = self._define_effects(frame_shape, effects, borders) 
         h, w = frame_shape
 
         orientation = "landscape" if w > h + 20 else "portrait" if h > w + 20 else "square"
-        hover = cv2.resize(hover, (w, h)).astype(np.float32)
-
-        t = tqdm(frames, desc="Adding hovers to video", leave=True)
-        frames = [self._decorate_frame(frame, hover) for frame in t]
+        
+        if hover is not None:
+            hover = cv2.resize(hover, (w, h)).astype(np.float32)
+            t = tqdm(frames, desc="Adding hovers to video", leave=True)
+            frames = [self._decorate_frame(frame, hover) for frame in t]
  
         if orientation == "landscape":
             border = imutils.resize(border, width=None, height=h)
