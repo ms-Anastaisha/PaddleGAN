@@ -209,6 +209,15 @@ class FirstOrderPredictor(BasePredictor):
         image.paste(border, mask=border)
         return image
 
+    def hover_frames_simplified(self, frames, hover):
+        t = trange(frames.shape[0], desc="Adding hovers to video", leave=True)
+        for i in t:
+            img_in_norm = frames[i] * (1/255.0)
+            comp = 1.0 - (1.0 - img_in_norm[:, :, :3]) * (1.0 - hover[:, :, :3])
+            frames[i][..., :3] = comp
+            frames[i] *= 255.0
+        return frames
+
     def _decorate_frame(self, image, effect):
         return bm.screen(
             cv2.cvtColor(image, cv2.COLOR_RGB2RGBA).astype(np.float32), effect, 1.0
@@ -251,8 +260,16 @@ class FirstOrderPredictor(BasePredictor):
 
         if hover is not None:
             hover = cv2.resize(hover, (w, h)).astype(np.float32)
-            t = tqdm(frames, desc="Adding hovers to video", leave=True)
-            frames = [self._decorate_frame(frame, hover) for frame in t]
+
+            # default hover
+            # t = tqdm(frames, desc="Adding hovers to video", leave=True)
+            # frames = [self._decorate_frame(frame, hover) for frame in t]
+
+            # simplified hover
+            hover *= (1/255.0)
+            frames = np.array(frames).astype(np.float32)
+            frames = self.hover_frames_simplified(frames, hover[..., :3])
+            frames = frames.astype(np.uint8)
 
         if orientation == "landscape":
             border = imutils.resize(border, width=None, height=h)
