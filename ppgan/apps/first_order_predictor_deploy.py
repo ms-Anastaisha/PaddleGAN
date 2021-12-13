@@ -298,7 +298,10 @@ class FirstOrderPredictor(BasePredictor):
     def _define_effects(self, frame_shape, effects, borders):
         h, w = frame_shape
         key = "landscape" if w > h + 20 else "portrait" if h > w + 20 else "square"
-        border = cv2.cvtColor(cv2.imread(borders[key], -1), cv2.COLOR_BGR2RGBA)
+        if borders[key] is not None:
+            border = cv2.cvtColor(cv2.imread(borders[key], -1), cv2.COLOR_BGR2RGBA)
+        else:
+            border = None
         if effects is not None:
             hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_BGR2RGBA)
         else:
@@ -338,26 +341,26 @@ class FirstOrderPredictor(BasePredictor):
             frames = np.array(frames).astype(np.float32)
             frames = self.hover_frames_simplified(frames, hover[..., :3])
             frames = frames.astype(np.uint8)
+        if border is not None:
+            if orientation == "landscape":
+                border = imutils.resize(border, width=None, height=h)
+                frames = self.fit_frames_to_landscape(np.array(frames), border)
+            elif orientation == "portrait":
+                border = imutils.resize(border, width=w, height=None)
+                frames = self.fit_frames_to_portrait(np.array(frames), border)
+            else:
+                border = imutils.resize(border, width=w, height=h)
+                frames = np.array(frames)
 
-        if orientation == "landscape":
-            border = imutils.resize(border, width=None, height=h)
-            frames = self.fit_frames_to_landscape(np.array(frames), border)
-        elif orientation == "portrait":
-            border = imutils.resize(border, width=w, height=None)
-            frames = self.fit_frames_to_portrait(np.array(frames), border)
-        else:
-            border = imutils.resize(border, width=w, height=h)
-            frames = np.array(frames)
+            if frames[0].shape[:2] != border.shape[:2]:
+                border = cv2.resize(
+                    border,
+                    (frames[0].shape[1], frames[0].shape[0]),
+                    interpolation=cv2.INTER_AREA,
+                )
 
-        if frames[0].shape[:2] != border.shape[:2]:
-            border = cv2.resize(
-                border,
-                (frames[0].shape[1], frames[0].shape[0]),
-                interpolation=cv2.INTER_AREA,
-            )
-
-        t = trange(frames.shape[0], desc="Adding borders to video", leave=True)
-        frames = [self._add_border(frames[i], border) for i in t]
+            t = trange(frames.shape[0], desc="Adding borders to video", leave=True)
+            frames = [self._add_border(frames[i], border) for i in t]
         return frames
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
