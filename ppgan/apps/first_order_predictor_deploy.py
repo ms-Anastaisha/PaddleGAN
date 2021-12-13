@@ -306,13 +306,17 @@ class FirstOrderPredictor(BasePredictor):
             hover = cv2.cvtColor(cv2.imread(effects[key], -1), cv2.COLOR_BGR2RGBA)
         else:
             hover = None
-        desired_height, desired_width = border.shape[:2]
-        if key == "landscape":
-            return (None, desired_height), border, hover
-        elif key == "portrait":
-            return (desired_width, None), border, hover
+        if borders[key] is not None:
+            desired_height, desired_width = border.shape[:2]
+            if key == "landscape":
+                return (None, desired_height), border, hover
+            elif key == "portrait":
+                return (desired_width, None), border, hover
+            else:
+                return (desired_width, desired_height), border, hover
         else:
-            return (desired_width, desired_height), border, hover
+            return (w, h), None, None
+
 
     def decorate(self, frames, decoration):
         frame_shape = frames[0].shape[:2]
