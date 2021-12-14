@@ -40,7 +40,7 @@ from ppgan.faceutils.face_detection.detection_utils import (
     upscale_detections,
     scale_bboxes,
 )
-from gfpgan import GFPGANer
+#from gfpgan import GFPGANer
 import moviepy.editor as mp
 
 from ppgan.apps.base_predictor import BasePredictor
@@ -233,16 +233,16 @@ class FirstOrderPredictor(BasePredictor):
         #         tile_pad=10,
         #         pre_pad=0,
         #         half=True)
-        if gfpgan_model_path:
-            self.gfpganer = GFPGANer(
-                model_path=gfpgan_model_path,
-                upscale=2,
-                arch="clean",
-                channel_multiplier=2,
-                bg_upsampler=None,
-            )
-        else:
-            self.gfpganer = None
+        # if gfpgan_model_path:
+        #     self.gfpganer = GFPGANer(
+        #         model_path=gfpgan_model_path,
+        #         upscale=2,
+        #         arch="clean",
+        #         channel_multiplier=2,
+        #         bg_upsampler=None,
+        #     )
+        # else:
+        self.gfpganer = None
 
         if face_enhancement:
             from ppgan.faceutils.face_enhancement import FaceEnhancement
