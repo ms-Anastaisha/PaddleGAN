@@ -95,40 +95,76 @@ class FirstOrderPredictor(BasePredictor):
         elif isinstance(config, dict):
             self.cfg = config
         elif config is None:
-            self.cfg = {
-                "model": {
-                    "common_params": {
-                        "num_kp": 10,
-                        "num_channels": 3,
-                        "estimate_jacobian": True,
-                    },
-                    "generator": {
-                        "kp_detector_cfg": {
-                            "temperature": 0.1,
-                            "block_expansion": 32,
-                            "max_features": 1024,
-                            "scale_factor": 0.25,
-                            "num_blocks": 5,
+            if mobile_net:
+                self.cfg = {
+                    "model": {
+                        "common_params": {
+                            "num_kp": 10,
+                            "num_channels": 3,
+                            "estimate_jacobian": True,
                         },
-                        "generator_cfg": {
-                            "block_expansion": 64,
-                            "max_features": 512,
-                            "num_down_blocks": 2,
-                            "num_bottleneck_blocks": 6,
-                            "estimate_occlusion_map": True,
-                            "dense_motion_params": {
-                                "block_expansion": 64,
-                                "max_features": 1024,
-                                "num_blocks": 5,
+                        "generator": {
+                            "kp_detector_cfg": {
+                                "temperature": 0.1,
+                                "block_expansion": 32,
+                                "max_features": 256,
                                 "scale_factor": 0.25,
+                                "num_blocks": 5,
+                                "mobile_net": True
+                            },
+                            "generator_cfg": {
+                                "block_expansion": 32,
+                                "max_features": 256,
+                                "num_down_blocks": 2,
+                                "num_bottleneck_blocks": 6,
+                                "estimate_occlusion_map": True,
+                                "dense_motion_params": {
+                                    "block_expansion": 32,
+                                    "max_features": 256,
+                                    "num_blocks": 5,
+                                    "scale_factor": 0.25,
+                                },
+                                "mobile_net": True
                             },
                         },
-                    },
+                    }
                 }
-            }
+            else:                
+                self.cfg = {
+                    "model": {
+                        "common_params": {
+                            "num_kp": 10,
+                            "num_channels": 3,
+                            "estimate_jacobian": True,
+                        },
+                        "generator": {
+                            "kp_detector_cfg": {
+                                "temperature": 0.1,
+                                "block_expansion": 32,
+                                "max_features": 1024,
+                                "scale_factor": 0.25,
+                                "num_blocks": 5,
+                            },
+                            "generator_cfg": {
+                                "block_expansion": 64,
+                                "max_features": 512,
+                                "num_down_blocks": 2,
+                                "num_bottleneck_blocks": 6,
+                                "estimate_occlusion_map": True,
+                                "dense_motion_params": {
+                                    "block_expansion": 64,
+                                    "max_features": 1024,
+                                    "num_blocks": 5,
+                                    "scale_factor": 0.25,
+                                },
+                            },
+                        },
+                    }
+                }
         self.image_size = image_size
         if weight_path is None:
             if mobile_net:
+                print("HERE")
                 vox_cpk_weight_url = "https://paddlegan.bj.bcebos.com/applications/first_order_model/vox_mobile.pdparams"
 
             else:
@@ -446,10 +482,10 @@ class FirstOrderPredictor(BasePredictor):
             **config["model"]["generator"]["kp_detector_cfg"],
             **config["model"]["common_params"]
         )
-
+        
         checkpoint = paddle.load(self.weight_path)
         generator.set_state_dict(checkpoint["generator"])
-
+        
         kp_detector.set_state_dict(checkpoint["kp_detector"])
 
         generator.eval()
