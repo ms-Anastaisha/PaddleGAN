@@ -16,6 +16,8 @@ from itertools import cycle
 import os
 import sys
 import cv2
+import tempfile
+from numpy.lib.function_base import delete
 
 import yaml
 import imageio
@@ -23,7 +25,6 @@ import numpy as np
 from tqdm import tqdm, trange
 from pathlib import Path
 from copy import deepcopy
-import tempfile
 
 import sys
 
@@ -404,17 +405,15 @@ class FirstOrderPredictor(BasePredictor):
         return frames
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
+        out_file = tempfile.NamedTemporaryFile(delete=False)
+        out_file.close()
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
         if audio is None:
-            temp = tempfile.NamedTemporaryFile(delete=False)
-
-            imageio.mimsave(
-                temp,
+            imageio.mimsave(out_file.name,
                 [np.array(frame) for frame in out_frame],
                 fps=fps,
             )
-            return temp
         else:
             audio_background = mp.AudioFileClip(audio)
             # if audio.endswith(".mp3"):
@@ -422,19 +421,14 @@ class FirstOrderPredictor(BasePredictor):
             # elif audio.endswith(".mp4"):
             #    audio_background = mp.VideoFileClip(audio)
             #    audio_background = audio_background.audio
-            temp = tempfile.NamedTemporaryFile(delete=True)
-
+            temp = "tmp.mp4"
             imageio.mimsave(temp, [np.array(frame) for frame in out_frame], fps=fps)
             videoclip_2 = mp.VideoFileClip(temp)
             if audio_background.duration > videoclip_2.duration:
                 audio_background = audio_background.subclip(0, videoclip_2.duration)
-
-            temp2 = tempfile.NamedTemporaryFile(delete=False)
-            videoclip_2.set_audio(audio_background).write_videofile(temp2, audio_codec="aac")
-
-            temp.close()
-            os.unlink(temp.name)
-            return temp2
+            videoclip_2.set_audio(audio_background).write_videofile(out_file.name, audio_codec="aac")
+            os.remove(temp)
+        return out_file.name
 
     def process_image(self, source_image, driving_videos, audio=None, decoration=None):
 
@@ -554,7 +548,7 @@ class FirstOrderPredictor(BasePredictor):
             patch[:, :, :] = 0
             mask[:, :] = 0
 
-        return self.write_with_audio(audio, out_frame, fps, decoration)
+        self.write_with_audio(audio, out_frame, fps, decoration)
 
     def run(self, source_image, driving_videos_paths, filename, audio, decoration=None):
 
