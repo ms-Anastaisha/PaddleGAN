@@ -23,6 +23,7 @@ import numpy as np
 from tqdm import tqdm, trange
 from pathlib import Path
 from copy import deepcopy
+import tempfile
 
 import sys
 
@@ -406,11 +407,14 @@ class FirstOrderPredictor(BasePredictor):
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
         if audio is None:
+            temp = tempfile.NamedTemporaryFile(delete=True)
+
             imageio.mimsave(
-                os.path.join(self.output, self.filename),
+                temp,
                 [np.array(frame) for frame in out_frame],
                 fps=fps,
             )
+            return temp
         else:
             audio_background = mp.AudioFileClip(audio)
             # if audio.endswith(".mp3"):
@@ -418,15 +422,20 @@ class FirstOrderPredictor(BasePredictor):
             # elif audio.endswith(".mp4"):
             #    audio_background = mp.VideoFileClip(audio)
             #    audio_background = audio_background.audio
-            temp = "tmp.mp4"
+            temp = tempfile.NamedTemporaryFile(delete=True)
+
             imageio.mimsave(temp, [np.array(frame) for frame in out_frame], fps=fps)
             videoclip_2 = mp.VideoFileClip(temp)
             if audio_background.duration > videoclip_2.duration:
                 audio_background = audio_background.subclip(0, videoclip_2.duration)
-            videoclip_2.set_audio(audio_background).write_videofile(
-                os.path.join(self.output, self.filename), audio_codec="aac"
-            )
-            os.remove(temp)
+
+            temp2 = tempfile.NamedTemporaryFile(delete=True)
+            videoclip_2.set_audio(audio_background).write_videofile(temp2, audio_codec="aac")
+
+            temp.close()
+            os.unlink(temp.name)
+
+            return temp2
 
     def process_image(self, source_image, driving_videos, audio=None, decoration=None):
 
