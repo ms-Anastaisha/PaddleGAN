@@ -17,6 +17,10 @@ import os
 import sys
 import cv2
 
+import matplotlib.pyplot as plt
+from ppgan.faceutils.dlibutils import detect, landmarks
+import dlib
+
 import yaml
 import imageio
 import numpy as np
@@ -38,6 +42,8 @@ from ppgan.faceutils import face_detection
 from ppgan.faceutils.face_detection.detection_utils import (
     upscale_detections,
     scale_bboxes,
+    compute_increased_bbox,
+    compute_aspect_preserved_bbox
 )
 from gfpgan import GFPGANer
 import moviepy.editor as mp
@@ -352,8 +358,6 @@ class FirstOrderPredictor(BasePredictor):
     def run(self, source_image, driving_videos_paths, filename, audio, decoration=None):
 
         self.filename = filename
-        # videoclip_1 = mp.VideoFileClip(driving_video)
-        # audio = videoclip_1.audio
 
         def get_prediction(face_image, driving_video):
             predictions = self.make_animation(
@@ -423,14 +427,40 @@ class FirstOrderPredictor(BasePredictor):
 
         for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1] : rec[3], rec[0] : rec[2]]
+
+            if rec[-1] != 0:
+                print(f"Face {i} must be aligned!")
+                face_image = imutils.rotate_bound(face_image.copy(), rec[-1])
+
             face_image = (
                 cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
             )
             predictions = get_prediction(face_image, driving_videos[bbox2video[i]])
+
+            if rec[-1] != 0:
+                x1, y1, x2, y2, _, angle = rec
+
+                face_image = np.uint8(face_image*255)
+                face_image = imutils.rotate_bound(face_image, -rec[-1])
+                _, mask_face, coords = remove_borders(face_image)
+                x, y ,w, h = coords
+                mask_face = cv2.resize(mask_face.astype(np.uint8), (x2 - x1, y2 - y1))
+
+                realigned_preds = []
+                for i in range(predictions.shape[0]):
+                    pred = imutils.rotate_bound(np.uint8(predictions[i]), -rec[-1])
+                    pred = pred[y+3:y+h-3, x+3:x+w-3]
+                    pred = cv2.resize(pred.astype(np.uint8), (x2 - x1, y2 - y1))
+                    
+                    realigned_preds.append(pred)
+
+            else:
+                realigned_preds = [predictions[i] for i in range(predictions.shape[0])]
+
             results.append(
                 {
                     "rec": rec,
-                    "predict": [predictions[i] for i in range(predictions.shape[0])],
+                    "predict": realigned_preds,
                 }
             )
             if len(bboxes) == 1 or not self.multi_person:
@@ -447,7 +477,7 @@ class FirstOrderPredictor(BasePredictor):
             frame = source_image.copy()
 
             for j, result in enumerate(results):
-                x1, y1, x2, y2, _ = result["rec"]
+                x1, y1, x2, y2, _, angle = result["rec"]
 
                 if i >= len(result["predict"]):
                     pass
@@ -455,7 +485,7 @@ class FirstOrderPredictor(BasePredictor):
                     out = result["predict"][i]
                     out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
 
-                    if len(results) == 1:
+                    if len(results) == 1 and angle == 0:
                         frame[y1:y2, x1:x2] = out
                         break
                     else:
@@ -561,6 +591,7 @@ class FirstOrderPredictor(BasePredictor):
         return np.concatenate(predictions)
 
     def extract_bbox(self, image):
+        # TODO: This function needs to be refactored
         detector = face_detection.FaceAlignment(
             face_detection.LandmarksType._2D,
             flip_input=False,
@@ -571,26 +602,72 @@ class FirstOrderPredictor(BasePredictor):
         predictions = list(
             filter(lambda x: ((x[3] - x[1]) * (x[2] - x[0])) > 1000, predictions)
         )
+        
+        angles = []
+        for p in predictions:
+            face = dlib.rectangle(left=p[0], top=p[1], right=p[2], bottom=p[3])
+            lms = landmarks(image, face)
+            lms = lms[:, ::-1]
+
+            left_eye_corner = lms[36]
+            right_eye_corner = lms[45]
+
+            radian = np.arctan((left_eye_corner[1] - right_eye_corner[1]) / (left_eye_corner[0] - right_eye_corner[0]))
+            angle = math.degrees(-radian) if radian > 0 else math.degrees(radian)
+            angle = 0 if abs(angle) <= 25 else angle
+            angles.append(int(angle))
+
         h, w, _ = image.shape
-        predictions = self.detection_func(predictions, (0, 0, w, h))
-        # predictions = list(map(lambda x: compute_aspect_preserved_bbox(x, image.shape[:2], 0.3), predictions))
-        return np.array(predictions)
+        processed_predictions = self.detection_func(predictions, (0, 0, w, h))
+    
+        for i, p in enumerate(processed_predictions):
+            if angles[i] != 0:
+                coords = compute_increased_bbox(predictions[i][:4], image.shape[:2], 0.15)
+                processed_predictions[i] = [*coords]
+                processed_predictions[i].append((coords[2]-coords[0])*(coords[3]-coords[1]))
+            processed_predictions[i].append(angles[i])
+        return np.array(processed_predictions)
 
     def extract_masks(self, bboxes, source_image):
-        if len(bboxes) == 1:
-            return
+        # if len(bboxes) == 1:
+        #     return
         box_masks = []
         for i, rec in enumerate(bboxes):
             face_image = source_image.copy()[rec[1] : rec[3], rec[0] : rec[2]]
+            if rec[-1] != 0:
+                face_image = imutils.rotate_bound(face_image.copy(), rec[-1])
             out = self.solov2.predict(image=[face_image.copy()])
             if out["segm"][0].shape != face_image.shape[:2]:
-                out["segm"] = np.resize(
-                    out["segm"], (out["segm"].shape[0], *face_image.shape[:2])
-                )
+                out["segm"] = out["segm"][:, :, :face_image.shape[1]]
+                out["segm"] = out["segm"][:, :face_image.shape[0], :]
+                # out["segm"] = np.resize(
+                #     out["segm"], (out["segm"].shape[0], *face_image.shape[:2])
+                # )
             center = face_image.shape[0] // 2, face_image.shape[1] // 2
             mask = self.extract_mask(out, center)
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 15))
-            mask = cv2.dilate(mask, kernel)
+            if rec[-1] == 0:
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 15))
+                mask = cv2.dilate(mask, kernel)
+
+            if rec[-1] != 0:
+                x1, y1, x2, y2, _, _ = rec
+                face_image = imutils.rotate_bound(face_image, -rec[-1])
+                _, _, coords = remove_borders(face_image)
+                x, y ,w, h = coords
+                mask = imutils.rotate_bound(mask, -rec[-1])
+                mask = mask[y:y+h, x:x+w]
+                mask = cv2.resize(mask.astype(np.uint8), (x2 - x1, y2 - y1))
+
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+                mask = cv2.dilate(mask, kernel, iterations=2)
+                
+                h, w = mask.shape[:2]
+                mask[h-20:h, :] = 0
+                mask[:, w-10:w] = 0
+
+                mask[:15, :] = 0
+                mask[:, :10] = 0
+            
             box_masks.append(mask)
         return box_masks
 
@@ -657,3 +734,18 @@ class FirstOrderPredictor(BasePredictor):
                 )
             frames = np.array(frames)
         return frames
+
+
+def remove_borders(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, mask = cv2.threshold(
+        blur, 1, 255, cv2.THRESH_BINARY
+    )
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    x, y ,w, h = cv2.boundingRect(contours[0])
+    out = image[y:y+h, x:x+w].copy()    
+    mask = mask[y:y+h, x:x+w]
+
+    return out, mask, (x, y ,w, h)
