@@ -407,14 +407,14 @@ class FirstOrderPredictor(BasePredictor):
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
         if audio is None:
-            temp = tempfile.NamedTemporaryFile(delete=False)
+            temp = tempfile.NamedTemporaryFile(delete=True)
 
             imageio.mimsave(
                 temp,
                 [np.array(frame) for frame in out_frame],
                 fps=fps,
             )
-            return temp.name
+            return temp
         else:
             audio_background = mp.AudioFileClip(audio)
             # if audio.endswith(".mp3"):
@@ -434,8 +434,7 @@ class FirstOrderPredictor(BasePredictor):
 
             temp.close()
             os.unlink(temp.name)
-
-            return temp2.name
+            return temp2
 
     def process_image(self, source_image, driving_videos, audio=None, decoration=None):
 
@@ -555,7 +554,7 @@ class FirstOrderPredictor(BasePredictor):
             patch[:, :, :] = 0
             mask[:, :] = 0
 
-        self.write_with_audio(audio, out_frame, fps, decoration)
+        return self.write_with_audio(audio, out_frame, fps, decoration)
 
     def run(self, source_image, driving_videos_paths, filename, audio, decoration=None):
 
