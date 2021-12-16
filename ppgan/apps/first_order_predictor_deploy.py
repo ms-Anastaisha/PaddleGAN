@@ -407,14 +407,14 @@ class FirstOrderPredictor(BasePredictor):
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
         if audio is None:
-            temp = tempfile.NamedTemporaryFile(delete=True)
+            temp = tempfile.NamedTemporaryFile(delete=False)
 
             imageio.mimsave(
                 temp,
                 [np.array(frame) for frame in out_frame],
                 fps=fps,
             )
-            return temp
+            return temp.name
         else:
             audio_background = mp.AudioFileClip(audio)
             # if audio.endswith(".mp3"):
@@ -429,13 +429,13 @@ class FirstOrderPredictor(BasePredictor):
             if audio_background.duration > videoclip_2.duration:
                 audio_background = audio_background.subclip(0, videoclip_2.duration)
 
-            temp2 = tempfile.NamedTemporaryFile(delete=True)
+            temp2 = tempfile.NamedTemporaryFile(delete=False)
             videoclip_2.set_audio(audio_background).write_videofile(temp2, audio_codec="aac")
 
             temp.close()
             os.unlink(temp.name)
 
-            return temp2
+            return temp2.name
 
     def process_image(self, source_image, driving_videos, audio=None, decoration=None):
 
