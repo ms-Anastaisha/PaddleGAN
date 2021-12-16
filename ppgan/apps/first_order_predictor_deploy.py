@@ -405,7 +405,7 @@ class FirstOrderPredictor(BasePredictor):
         return frames
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
-        out_file = tempfile.NamedTemporaryFile(delete=False)
+        out_file = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
         out_file.close()
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
