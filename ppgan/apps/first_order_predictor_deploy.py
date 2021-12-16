@@ -407,7 +407,7 @@ class FirstOrderPredictor(BasePredictor):
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
         if audio is None:
-            temp = tempfile.NamedTemporaryFile(delete=True)
+            temp = tempfile.NamedTemporaryFile(delete=False)
 
             imageio.mimsave(
                 temp,
