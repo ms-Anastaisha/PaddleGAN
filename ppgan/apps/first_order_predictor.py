@@ -611,7 +611,7 @@ class FirstOrderPredictor(BasePredictor):
 
             radian = np.arctan((left_eye_corner[1] - right_eye_corner[1]) / (left_eye_corner[0] - right_eye_corner[0]))
             angle = math.degrees(-radian) if radian > 0 else math.degrees(radian)
-            angle = 0 if abs(angle) <= 30 else angle
+            angle = 0 if abs(angle) <= 35 else angle
             angles.append(int(angle))
 
         h, w, _ = image.shape
