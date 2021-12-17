@@ -17,10 +17,6 @@ import os
 import sys
 import cv2
 
-import matplotlib.pyplot as plt
-from ppgan.faceutils.dlibutils import detect, landmarks
-import dlib
-
 import yaml
 import imageio
 import numpy as np
@@ -33,17 +29,18 @@ cur_path = os.path.abspath(os.path.dirname(__file__))
 root_path = os.path.split(cur_path)[0]
 sys.path.insert(0, os.path.dirname(root_path))
 
+import dlib
 import paddle
 from ppgan.utils.download import get_path_from_url
 from ppgan.utils.animate import normalize_kp
 from ppgan.modules.keypoint_detector import KPDetector
 from ppgan.models.generators.occlusion_aware import OcclusionAwareGenerator
 from ppgan.faceutils import face_detection
+from ppgan.faceutils.dlibutils import landmarks
 from ppgan.faceutils.face_detection.detection_utils import (
     upscale_detections,
     scale_bboxes,
     compute_increased_bbox,
-    compute_aspect_preserved_bbox
 )
 from gfpgan import GFPGANer
 import moviepy.editor as mp
@@ -614,7 +611,7 @@ class FirstOrderPredictor(BasePredictor):
 
             radian = np.arctan((left_eye_corner[1] - right_eye_corner[1]) / (left_eye_corner[0] - right_eye_corner[0]))
             angle = math.degrees(-radian) if radian > 0 else math.degrees(radian)
-            angle = 0 if abs(angle) <= 25 else angle
+            angle = 0 if abs(angle) <= 30 else angle
             angles.append(int(angle))
 
         h, w, _ = image.shape
@@ -622,7 +619,7 @@ class FirstOrderPredictor(BasePredictor):
     
         for i, p in enumerate(processed_predictions):
             if angles[i] != 0:
-                coords = compute_increased_bbox(predictions[i][:4], image.shape[:2], 0.15)
+                coords = compute_increased_bbox(predictions[i][:4], image.shape[:2], 0.2)
                 processed_predictions[i] = [*coords]
                 processed_predictions[i].append((coords[2]-coords[0])*(coords[3]-coords[1]))
             processed_predictions[i].append(angles[i])
@@ -662,7 +659,7 @@ class FirstOrderPredictor(BasePredictor):
                 mask = cv2.dilate(mask, kernel, iterations=2)
                 
                 h, w = mask.shape[:2]
-                mask[h-20:h, :] = 0
+                mask[h-15:h, :] = 0
                 mask[:, w-10:w] = 0
 
                 mask[:15, :] = 0
