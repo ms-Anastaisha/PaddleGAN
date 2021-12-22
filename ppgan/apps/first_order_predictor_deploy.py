@@ -26,6 +26,7 @@ from tqdm import tqdm, trange
 from pathlib import Path
 from copy import deepcopy
 from time import time
+import numexpr as ne
 
 import sys
 
@@ -322,13 +323,15 @@ class FirstOrderPredictor(BasePredictor):
         return image
 
     def hover_frames_simplified(self, frames, hover):
-        t = trange(frames.shape[0], desc="Adding hovers to video", leave=True)
-        for i in t:
+        for i in frames.shape[0]:
             img_in_norm = frames[i] * (1 / 255.0)
             comp = 1.0 - (1.0 - img_in_norm[:, :, :3]) * (1.0 - hover[:, :, :3])
             frames[i][..., :3] = comp
             frames[i] *= 255.0
         return frames
+    
+    def hover_frames(self, frames, hover):
+        return ne.evaluate("(1 - (1 - out_frame / 255)) * (1 - hover / 255) ) * 255")
 
     def _decorate_frame(self, image, effect):
         return bm.screen(
@@ -378,6 +381,7 @@ class FirstOrderPredictor(BasePredictor):
 
         if hover is not None:
             s2 = time()
+            print(w, h, "image size for hover")
             hover = cv2.resize(hover, (w, h)).astype(np.float32)
 
             # default hover
@@ -385,7 +389,7 @@ class FirstOrderPredictor(BasePredictor):
             # frames = [self._decorate_frame(frame, hover) for frame in t]
 
             # simplified hover
-            hover *= 1 / 255.0
+            #hover *= 1 / 255.0
             frames = np.array(frames).astype(np.float32)
             frames = self.hover_frames_simplified(frames, hover[..., :3])
             frames = frames.astype(np.uint8)
@@ -563,7 +567,7 @@ class FirstOrderPredictor(BasePredictor):
 
             for j, result in enumerate(results):
                 x1, y1, x2, y2, _ = result["rec"]
-
+                print(x1, y1, x2, y2, "rec in generate frame")
                 if i >= len(result["predict"]):
                     pass
                 else:
