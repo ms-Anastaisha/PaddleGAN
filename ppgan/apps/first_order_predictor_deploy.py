@@ -416,11 +416,12 @@ class FirstOrderPredictor(BasePredictor):
         s1 = time()
         out_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         out_file.close()
-        out_frame = [np.array(frame) for frame in out_frame]
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
         s2 = time()
         print("Decoration time: {}".format(s2 - s1))
+        out_frame = [np.array(frame) for frame in out_frame]
+
         if audio is None:
             imageio.mimsave(
                 out_file.name,
