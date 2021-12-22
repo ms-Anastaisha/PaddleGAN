@@ -391,7 +391,7 @@ class FirstOrderPredictor(BasePredictor):
             # simplified hover
             #hover *= 1 / 255.0
             frames = np.array(frames).astype(np.float32)
-            frames = self.hover_frames_simplified(frames, hover[..., :3])
+            frames = self.hover_frames(frames, hover[..., :3])
             frames = frames.astype(np.uint8)
             s3 = time()
             print("hover time:", s3 - s2)
