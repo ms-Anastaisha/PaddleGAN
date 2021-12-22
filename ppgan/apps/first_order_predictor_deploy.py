@@ -411,7 +411,7 @@ class FirstOrderPredictor(BasePredictor):
                 border = cv2.resize(
                     border,
                     (frames[0].shape[1], frames[0].shape[0]),
-                    interpolation=cv2.INTER_AREA,
+                    interpolation=cv2.INTER_NEAREST,
                 )
             s3 = time()
             print("border resize time:", s3 - s2)
