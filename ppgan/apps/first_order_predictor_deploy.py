@@ -433,7 +433,7 @@ class FirstOrderPredictor(BasePredictor):
 
         if audio is None:
             videoclip_1 = mp.ImageSequenceClip(out_frame, fps=fps)
-            videoclip_1.write_videofile(out_file.name, preset="ultrafast", threads=2)
+            videoclip_1.write_videofile(out_file.name, preset="ultrafast", threads=4)
             s3 = time()
             print("No audio time: {}".format(s3 - s2))
         else:
@@ -453,7 +453,7 @@ class FirstOrderPredictor(BasePredictor):
             # os.remove(temp.name)
             videoclip_2 = mp.ImageSequenceClip(out_frame, fps=fps)
             videoclip_2.write_videofile(
-                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=2
+                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=4
             )
 
             print("Audio time: {}".format(time() - s2))
@@ -567,7 +567,6 @@ class FirstOrderPredictor(BasePredictor):
 
             for j, result in enumerate(results):
                 x1, y1, x2, y2, _ = result["rec"]
-                print(x1, y1, x2, y2, "rec in generate frame")
                 if i >= len(result["predict"]):
                     pass
                 else:
