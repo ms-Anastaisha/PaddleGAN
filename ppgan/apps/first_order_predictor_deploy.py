@@ -536,25 +536,25 @@ class FirstOrderPredictor(BasePredictor):
         patch = np.zeros(img.shape).astype("uint8")
         mask = np.zeros(img.shape[:2]).astype("uint8")
 
-        for i in trange(max([len(i["frames"]) for i in image_videos])):
-            frame = img.copy()
+        for j, result in enumerate(results):
+            x1, y1, x2, y2, _ = result["rec"]
+            if i >= len(result["predict"]):
+                pass
+            else:
+                out = result["predict"][i]
+                out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
 
-            for j, result in enumerate(results):
-                x1, y1, x2, y2, _ = result["rec"]
-                if i >= len(result["predict"]):
-                    pass
+            for i in trange(max([len(i["frames"]) for i in image_videos])):
+                frame = img.copy()
+
+                if len(results) == 1:
+                    frame[y1:y2, x1:x2] = out
+                    break
                 else:
-                    out = result["predict"][i]
-                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
+                    patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
 
-                    if len(results) == 1:
-                        frame[y1:y2, x1:x2] = out
-                        break
-                    else:
-                        patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
-
-                        mask[y1:y2, x1:x2] = box_masks[j]
-                    frame = cv2.copyTo(patch, mask, frame)
+                    mask[y1:y2, x1:x2] = box_masks[j]
+                frame = cv2.copyTo(patch, mask, frame)
 
             out_frame.append(frame)
             patch[:, :, :] = 0
