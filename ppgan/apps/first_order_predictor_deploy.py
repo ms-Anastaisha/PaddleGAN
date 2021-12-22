@@ -475,7 +475,7 @@ class FirstOrderPredictor(BasePredictor):
             else:
                 r = 768.0 / w
                 dim = (768, int(r * h))
-            img = img.resize(img, dim, Image.NEAREST)
+            img = img.resize(dim, Image.NEAREST)
         img = np.array(img)
 
         def get_prediction(face_image, driving_video):
