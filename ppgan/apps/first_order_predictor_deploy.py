@@ -477,6 +477,11 @@ class FirstOrderPredictor(BasePredictor):
                 dim = (int(r * h), 768)
             img = img.resize(dim, Image.NEAREST)
         img = np.array(img)
+        if img.ndim == 2:
+            img = np.expand_dims(img, axis=2)
+        # som images have 4 channels
+        if img.shape[2] > 3:
+            img = img[:, :, :3]
 
         def get_prediction(face_image, driving_video):
             predictions = self.make_animation(
