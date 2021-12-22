@@ -545,7 +545,10 @@ class FirstOrderPredictor(BasePredictor):
                 out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
 
             for i in trange(max([len(i["frames"]) for i in image_videos])):
-                frame = img.copy()
+                if j == 0:
+                    frame = img.copy()
+                else:
+                    frame = out_frame[i]
 
                 if len(results) == 1:
                     frame[y1:y2, x1:x2] = out
@@ -555,10 +558,14 @@ class FirstOrderPredictor(BasePredictor):
 
                     mask[y1:y2, x1:x2] = box_masks[j]
                 frame = cv2.copyTo(patch, mask, frame)
+                patch[:, :, :] = 0
+                mask[:, :] = 0
+                if j == 0:
+                    out_frame.append(frame)
+                else:
+                    out_frame[i] = frame
+                
 
-            out_frame.append(frame)
-            patch[:, :, :] = 0
-            mask[:, :] = 0
         s7 = time()
         print(s7 - s6, "generate frame step")
         return self.write_with_audio(audio, out_frame, fps, decoration)
