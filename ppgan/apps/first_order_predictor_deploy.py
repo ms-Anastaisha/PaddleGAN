@@ -43,7 +43,8 @@ from ppgan.faceutils.face_detection.detection_utils import (
     upscale_detections,
     scale_bboxes,
 )
-#from gfpgan import GFPGANer
+
+# from gfpgan import GFPGANer
 import moviepy.editor as mp
 
 from ppgan.apps.base_predictor import BasePredictor
@@ -180,7 +181,7 @@ class FirstOrderPredictor(BasePredictor):
                                 "max_features": 256,
                                 "scale_factor": 0.25,
                                 "num_blocks": 5,
-                                "mobile_net": True
+                                "mobile_net": True,
                             },
                             "generator_cfg": {
                                 "block_expansion": 32,
@@ -194,12 +195,12 @@ class FirstOrderPredictor(BasePredictor):
                                     "num_blocks": 5,
                                     "scale_factor": 0.25,
                                 },
-                                "mobile_net": True
+                                "mobile_net": True,
                             },
                         },
                     }
                 }
-            else:                
+            else:
                 self.cfg = {
                     "model": {
                         "common_params": {
@@ -318,7 +319,7 @@ class FirstOrderPredictor(BasePredictor):
     def hover_frames_simplified(self, frames, hover):
         t = trange(frames.shape[0], desc="Adding hovers to video", leave=True)
         for i in t:
-            img_in_norm = frames[i] * (1/255.0)
+            img_in_norm = frames[i] * (1 / 255.0)
             comp = 1.0 - (1.0 - img_in_norm[:, :, :3]) * (1.0 - hover[:, :, :3])
             frames[i][..., :3] = comp
             frames[i] *= 255.0
@@ -355,7 +356,6 @@ class FirstOrderPredictor(BasePredictor):
         else:
             return (w, h), None, None
 
-
     def decorate(self, frames, decoration):
         frame_shape = frames[0].shape[:2]
         borders = decoration["borders"]
@@ -380,7 +380,7 @@ class FirstOrderPredictor(BasePredictor):
             # frames = [self._decorate_frame(frame, hover) for frame in t]
 
             # simplified hover
-            hover *= (1/255.0)
+            hover *= 1 / 255.0
             frames = np.array(frames).astype(np.float32)
             frames = self.hover_frames_simplified(frames, hover[..., :3])
             frames = frames.astype(np.uint8)
@@ -414,15 +414,17 @@ class FirstOrderPredictor(BasePredictor):
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
         s1 = time()
-        out_file = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+        out_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         out_file.close()
+        out_frame = [np.array(frame) for frame in out_frame]
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
         s2 = time()
         print("Decoration time: {}".format(s2 - s1))
         if audio is None:
-            imageio.mimsave(out_file.name,
-                [np.array(frame) for frame in out_frame],
+            imageio.mimsave(
+                out_file.name,
+                out_frame,
                 fps=fps,
             )
             s3 = time()
@@ -443,7 +445,9 @@ class FirstOrderPredictor(BasePredictor):
             # videoclip_2.set_audio(audio_background).write_videofile(out_file.name, audio_codec="copy")
             # os.remove(temp.name)
             videoclip_2 = mp.ImageSequenceClip(out_frame, fps=fps)
-            videoclip_2.write_videofile(out_file.name, preset='ultrafast', audio=audio, audio_codec="aac")
+            videoclip_2.write_videofile(
+                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac"
+            )
 
             print("Audio time: {}".format(time() - s2))
         return out_file.name
@@ -503,7 +507,7 @@ class FirstOrderPredictor(BasePredictor):
         s3 = time()
         print(s3 - s2, "scale step")
         image_videos = []
-        for driving_video in driving_videos[:len(bboxes)]:
+        for driving_video in driving_videos[: len(bboxes)]:
             fps = driving_video["fps"]
 
             try:
@@ -530,7 +534,9 @@ class FirstOrderPredictor(BasePredictor):
             face_image = (
                 cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
             )
-            predictions = get_prediction(face_image, image_videos[bbox2video[i]]['frames'])
+            predictions = get_prediction(
+                face_image, image_videos[bbox2video[i]]["frames"]
+            )
             results.append(
                 {
                     "rec": rec,
@@ -549,7 +555,7 @@ class FirstOrderPredictor(BasePredictor):
         patch = np.zeros(img.shape).astype("uint8")
         mask = np.zeros(img.shape[:2]).astype("uint8")
 
-        for i in trange(max([len(i['frames']) for i in image_videos])):
+        for i in trange(max([len(i["frames"]) for i in image_videos])):
             frame = img.copy()
 
             for j, result in enumerate(results):
@@ -890,4 +896,3 @@ class FirstOrderPredictor(BasePredictor):
                 )
             frames = np.array(frames)
         return frames
-    
