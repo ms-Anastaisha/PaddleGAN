@@ -455,7 +455,7 @@ class FirstOrderPredictor(BasePredictor):
             # os.remove(temp.name)
             videoclip_2 = mp.ImageSequenceClip(out_frame, fps=fps)
             videoclip_2.write_videofile(
-                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=2, logger=None
+                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=2Z, logger=None
             )
             videoclip_2.close()
             print("Audio time: {}".format(time() - s2))
@@ -471,10 +471,10 @@ class FirstOrderPredictor(BasePredictor):
         if h >= 768 or w >= 768:
             if h > w:
                 r = 768.0 / h
-                dim = (int(r * w), 768)
+                dim = (768, int(r * w))
             else:
                 r = 768.0 / w
-                dim = (768, int(r * h))
+                dim = (int(r * h), 768)
             img = img.resize(dim, Image.NEAREST)
         img = np.array(img)
 
