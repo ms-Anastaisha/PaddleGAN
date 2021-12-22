@@ -433,7 +433,7 @@ class FirstOrderPredictor(BasePredictor):
 
         if audio is None:
             videoclip_1 = mp.ImageSequenceClip(out_frame, fps=fps)
-            videoclip_1.write_videofile(out_file.name, preset="ultrafast")
+            videoclip_1.write_videofile(out_file.name, preset="ultrafast", threads=2)
             s3 = time()
             print("No audio time: {}".format(s3 - s2))
         else:
@@ -453,7 +453,7 @@ class FirstOrderPredictor(BasePredictor):
             # os.remove(temp.name)
             videoclip_2 = mp.ImageSequenceClip(out_frame, fps=fps)
             videoclip_2.write_videofile(
-                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac"
+                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=2
             )
 
             print("Audio time: {}".format(time() - s2))
@@ -470,13 +470,13 @@ class FirstOrderPredictor(BasePredictor):
         if img.shape[2] > 3:
             img = img[:, :, :3]
         h, w, _ = img.shape
-        if h >= 1024 or w >= 1024:
+        if h >= 768 or w >= 768:
             if h > w:
-                r = 1024.0 / h
-                dim = (int(r * w), 1024)
+                r = 768.0 / h
+                dim = (int(r * w), 768)
             else:
-                r = 1024.0 / w
-                dim = (1024, int(r * h))
+                r = 768.0 / w
+                dim = (768, int(r * h))
             img = cv2.resize(img, dim)
 
         def get_prediction(face_image, driving_video):
