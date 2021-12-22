@@ -423,11 +423,8 @@ class FirstOrderPredictor(BasePredictor):
         out_frame = [np.array(frame) for frame in out_frame]
 
         if audio is None:
-            imageio.mimsave(
-                out_file.name,
-                out_frame,
-                fps=fps,
-            )
+            videoclip_1 = mp.ImageSequenceClip(out_frame, fps=fps)
+            videoclip_1.write_videofile(out_file.name, preset="ultrafast")
             s3 = time()
             print("No audio time: {}".format(s3 - s2))
         else:
