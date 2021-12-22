@@ -27,7 +27,6 @@ from pathlib import Path
 from copy import deepcopy
 from time import time
 import numexpr as ne
-from PIL import Image
 
 import sys
 
@@ -412,7 +411,7 @@ class FirstOrderPredictor(BasePredictor):
                 border = cv2.resize(
                     border,
                     (frames[0].shape[1], frames[0].shape[0]),
-                    interpolation=cv2.INTER_NEAREST,
+                    interpolation=cv2.INTER_AREA,
                 )
             s3 = time()
             print("border resize time:", s3 - s2)
@@ -465,23 +464,21 @@ class FirstOrderPredictor(BasePredictor):
 
         driving_videos = deepcopy(driving_videos)
 
-        img = source_image.convert("RGB")
-
-        h, w = img.size
-        if h >= 768 or w >= 768:
-            if h > w:
-                r = 768.0 / h
-                dim = (768, int(r * w))
-            else:
-                r = 768.0 / w
-                dim = (int(r * h), 768)
-            img = img.resize(dim, Image.NEAREST)
-        img = np.array(img)
+        img = np.array(source_image)
         if img.ndim == 2:
             img = np.expand_dims(img, axis=2)
         # som images have 4 channels
         if img.shape[2] > 3:
             img = img[:, :, :3]
+        h, w, _ = img.shape
+        if h >= 768 or w >= 768:
+            if h > w:
+                r = 768.0 / h
+                dim = (int(r * w), 768)
+            else:
+                r = 768.0 / w
+                dim = (768, int(r * h))
+            img = cv2.resize(img, dim)
 
         def get_prediction(face_image, driving_video):
             predictions = self.make_animation(
@@ -543,7 +540,7 @@ class FirstOrderPredictor(BasePredictor):
         for i, rec in enumerate(bboxes):
             face_image = img.copy()[rec[1] : rec[3], rec[0] : rec[2]]
             face_image = (
-                cv2.resize(face_image, (self.image_size, self.image_size), interpolation=cv2.INTER_NEAREST) / 255.0
+                cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
             )
             predictions = get_prediction(
                 face_image, image_videos[bbox2video[i]]["frames"]
@@ -575,7 +572,7 @@ class FirstOrderPredictor(BasePredictor):
                     pass
                 else:
                     out = result["predict"][i]
-                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1), interpolation=cv2.INTER_NEAREST)
+                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
 
                     if len(results) == 1:
                         frame[y1:y2, x1:x2] = out
