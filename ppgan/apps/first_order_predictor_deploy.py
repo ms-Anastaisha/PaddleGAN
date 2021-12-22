@@ -428,20 +428,23 @@ class FirstOrderPredictor(BasePredictor):
             s3 = time()
             print("No audio time: {}".format(s3 - s2))
         else:
-            audio_background = mp.AudioFileClip(audio)
-            # if audio.endswith(".mp3"):
-            #    audio_background = mp.AudioFileClip(audio)
-            # elif audio.endswith(".mp4"):
-            #    audio_background = mp.VideoFileClip(audio)
-            #    audio_background = audio_background.audio
-            temp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-            temp.close()
-            imageio.mimsave(temp.name, [np.array(frame) for frame in out_frame], fps=fps)
-            videoclip_2 = mp.VideoFileClip(temp.name)
-            if audio_background.duration > videoclip_2.duration:
-                audio_background = audio_background.subclip(0, videoclip_2.duration)
-            videoclip_2.set_audio(audio_background).write_videofile(out_file.name, audio_codec="aac")
-            os.remove(temp.name)
+            # audio_background = mp.AudioFileClip(audio)
+            # # if audio.endswith(".mp3"):
+            # #    audio_background = mp.AudioFileClip(audio)
+            # # elif audio.endswith(".mp4"):
+            # #    audio_background = mp.VideoFileClip(audio)
+            # #    audio_background = audio_background.audio
+            # temp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+            # temp.close()
+            # imageio.mimsave(temp.name, [np.array(frame) for frame in out_frame], fps=fps)
+            # videoclip_2 = mp.VideoFileClip(temp.name)
+            # if audio_background.duration > videoclip_2.duration:
+            #     audio_background = audio_background.subclip(0, videoclip_2.duration)
+            # videoclip_2.set_audio(audio_background).write_videofile(out_file.name, audio_codec="copy")
+            # os.remove(temp.name)
+            videoclip_2 = mp.ImageSequenceClip(out_frame, fps=fps)
+            videoclip_2.write_videofile(out_file.name, preset='ultrafast', audio=audio, audio_codec="aac")
+
             print("Audio time: {}".format(time() - s2))
         return out_file.name
 
