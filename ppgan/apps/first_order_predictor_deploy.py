@@ -25,6 +25,7 @@ import numpy as np
 from tqdm import tqdm, trange
 from pathlib import Path
 from copy import deepcopy
+from time import time
 
 import sys
 
@@ -334,7 +335,7 @@ class FirstOrderPredictor(BasePredictor):
 
     def _define_effects(self, frame_shape, effects, borders):
         h, w = frame_shape
-        key = "landscape" if w > h + 20 else "portrait" if h > w + 20 else "square"
+        key = "landscape" if w > h + 40 else "portrait" if h > w + 40 else "square"
         if borders[key] is not None:
             border = cv2.cvtColor(cv2.imread(borders[key], -1), cv2.COLOR_BGR2RGBA)
         else:
@@ -362,15 +363,16 @@ class FirstOrderPredictor(BasePredictor):
             effects = decoration["hovers"]
         else:
             effects = None
-
+        s1 = time()
         dim, border, hover = self._define_effects(frame_shape, effects, borders)
         h, w = frame_shape
 
         orientation = (
-            "landscape" if w > h + 20 else "portrait" if h > w + 20 else "square"
+            "landscape" if w > h + 40 else "portrait" if h > w + 40 else "square"
         )
 
         if hover is not None:
+            s2 = time()
             hover = cv2.resize(hover, (w, h)).astype(np.float32)
 
             # default hover
@@ -382,7 +384,10 @@ class FirstOrderPredictor(BasePredictor):
             frames = np.array(frames).astype(np.float32)
             frames = self.hover_frames_simplified(frames, hover[..., :3])
             frames = frames.astype(np.uint8)
+            s3 = time()
+            print("hover time:", s3 - s2)
         if border is not None:
+            s2 = time()
             if orientation == "landscape":
                 border = imutils.resize(border, width=None, height=h)
                 frames = self.fit_frames_to_landscape(np.array(frames), border)
@@ -399,21 +404,29 @@ class FirstOrderPredictor(BasePredictor):
                     (frames[0].shape[1], frames[0].shape[0]),
                     interpolation=cv2.INTER_AREA,
                 )
-
+            s3 = time()
+            print("border resize time:", s3 - s2)
             t = trange(frames.shape[0], desc="Adding borders to video", leave=True)
             frames = [self._add_border(frames[i], border) for i in t]
+            s4 = time()
+            print("add border time:", s4 - s3)
         return frames
 
     def write_with_audio(self, audio, out_frame, fps, decoration=None):
+        s1 = time()
         out_file = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
         out_file.close()
         if decoration is not None:
             out_frame = self.decorate(out_frame, decoration)
+        s2 = time()
+        print("Decoration time: {}".format(s2 - s1))
         if audio is None:
             imageio.mimsave(out_file.name,
                 [np.array(frame) for frame in out_frame],
                 fps=fps,
             )
+            s3 = time()
+            print("No audio time: {}".format(s3 - s2))
         else:
             audio_background = mp.AudioFileClip(audio)
             # if audio.endswith(".mp3"):
@@ -421,13 +434,15 @@ class FirstOrderPredictor(BasePredictor):
             # elif audio.endswith(".mp4"):
             #    audio_background = mp.VideoFileClip(audio)
             #    audio_background = audio_background.audio
-            temp = "tmp.mp4"
-            imageio.mimsave(temp, [np.array(frame) for frame in out_frame], fps=fps)
-            videoclip_2 = mp.VideoFileClip(temp)
+            temp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+            temp.close()
+            imageio.mimsave(temp.name, [np.array(frame) for frame in out_frame], fps=fps)
+            videoclip_2 = mp.VideoFileClip(temp.name)
             if audio_background.duration > videoclip_2.duration:
                 audio_background = audio_background.subclip(0, videoclip_2.duration)
             videoclip_2.set_audio(audio_background).write_videofile(out_file.name, audio_codec="aac")
-            os.remove(temp)
+            os.remove(temp.name)
+            print("Audio time: {}".format(time() - s2))
         return out_file.name
 
     def process_image(self, source_image, driving_videos, audio=None, decoration=None):
@@ -461,8 +476,11 @@ class FirstOrderPredictor(BasePredictor):
             )
             return predictions
 
+        st = time()
         results = []
         bboxes = self.extract_bbox(img.copy())
+        s1 = time()
+        print(s1 - st, "bbox step")
         # bboxes, coords = self.extract_bbox(img.copy())
         print(str(len(bboxes)) + " persons have been detected")
         areas = [x[4] for x in bboxes]
@@ -475,10 +493,12 @@ class FirstOrderPredictor(BasePredictor):
             _, _, img = self.gfpganer.enhance(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
+        s2 = time()
         bboxes[:, :4] = scale_bboxes(
             original_shape, bboxes[:, :4].astype(np.float64), img.shape
         ).round()
-
+        s3 = time()
+        print(s3 - s2, "scale step")
         image_videos = []
         for driving_video in driving_videos[:len(bboxes)]:
             fps = driving_video["fps"]
@@ -493,7 +513,8 @@ class FirstOrderPredictor(BasePredictor):
                 pass
 
             image_videos.append(driving_video)
-
+        s4 = time()
+        print(s4 - s3, "resize driving video step")
         bbox2video = {}
         if len(bboxes) <= len(image_videos):
             bbox2video = {i: i for i in range(len(bboxes))}
@@ -515,11 +536,13 @@ class FirstOrderPredictor(BasePredictor):
             )
             if len(bboxes) == 1 or not self.multi_person:
                 break
-
+        s5 = time()
+        print(s5 - s4, "get prediction step")
         out_frame = []
 
         box_masks = self.extract_masks(bboxes, img)
-
+        s6 = time()
+        print(s6 - s5, "extract masks step")
         patch = np.zeros(img.shape).astype("uint8")
         mask = np.zeros(img.shape[:2]).astype("uint8")
 
@@ -547,7 +570,8 @@ class FirstOrderPredictor(BasePredictor):
             out_frame.append(frame)
             patch[:, :, :] = 0
             mask[:, :] = 0
-
+        s7 = time()
+        print(s7 - s6, "generate frame step")
         return self.write_with_audio(audio, out_frame, fps, decoration)
 
     def run(self, source_image, driving_videos_paths, filename, audio, decoration=None):
