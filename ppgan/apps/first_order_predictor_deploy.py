@@ -27,6 +27,7 @@ from pathlib import Path
 from copy import deepcopy
 from time import time
 import numexpr as ne
+from PIL import Image
 
 import sys
 
@@ -411,7 +412,7 @@ class FirstOrderPredictor(BasePredictor):
                 border = cv2.resize(
                     border,
                     (frames[0].shape[1], frames[0].shape[0]),
-                    interpolation=cv2.INTER_AREA,
+                    interpolation=cv2.INTER_NEAREST,
                 )
             s3 = time()
             print("border resize time:", s3 - s2)
@@ -433,7 +434,7 @@ class FirstOrderPredictor(BasePredictor):
 
         if audio is None:
             videoclip_1 = mp.ImageSequenceClip(out_frame, fps=fps)
-            videoclip_1.write_videofile(out_file.name, preset="ultrafast", threads=4, progress_bar=False)
+            videoclip_1.write_videofile(out_file.name, preset="ultrafast", threads=4, logger=None)
             videoclip_1.close()
             s3 = time()
             print("No audio time: {}".format(s3 - s2))
@@ -454,7 +455,7 @@ class FirstOrderPredictor(BasePredictor):
             # os.remove(temp.name)
             videoclip_2 = mp.ImageSequenceClip(out_frame, fps=fps)
             videoclip_2.write_videofile(
-                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=4, progress_bar=False
+                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=4, logger=None
             )
             videoclip_2.close()
             print("Audio time: {}".format(time() - s2))
@@ -464,13 +465,9 @@ class FirstOrderPredictor(BasePredictor):
 
         driving_videos = deepcopy(driving_videos)
 
-        img = np.array(source_image)
-        if img.ndim == 2:
-            img = np.expand_dims(img, axis=2)
-        # som images have 4 channels
-        if img.shape[2] > 3:
-            img = img[:, :, :3]
-        h, w, _ = img.shape
+        img = source_image.convert("RGB")
+
+        h, w = img.size
         if h >= 768 or w >= 768:
             if h > w:
                 r = 768.0 / h
@@ -478,7 +475,8 @@ class FirstOrderPredictor(BasePredictor):
             else:
                 r = 768.0 / w
                 dim = (768, int(r * h))
-            img = cv2.resize(img, dim)
+            img = img.resize(img, dim, Image.NEAREST)
+        img = np.array(img)
 
         def get_prediction(face_image, driving_video):
             predictions = self.make_animation(
@@ -540,7 +538,7 @@ class FirstOrderPredictor(BasePredictor):
         for i, rec in enumerate(bboxes):
             face_image = img.copy()[rec[1] : rec[3], rec[0] : rec[2]]
             face_image = (
-                cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0
+                cv2.resize(face_image, (self.image_size, self.image_size)) / 255.0, interpolation = cv2.INTER_NEAREST
             )
             predictions = get_prediction(
                 face_image, image_videos[bbox2video[i]]["frames"]
@@ -572,7 +570,7 @@ class FirstOrderPredictor(BasePredictor):
                     pass
                 else:
                     out = result["predict"][i]
-                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
+                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1), interpolation = cv2.INTER_NEAREST)
 
                     if len(results) == 1:
                         frame[y1:y2, x1:x2] = out
