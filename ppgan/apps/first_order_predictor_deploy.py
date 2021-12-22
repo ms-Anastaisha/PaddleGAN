@@ -255,6 +255,11 @@ class FirstOrderPredictor(BasePredictor):
         self.best_frame = best_frame
         self.ratio = ratio
         self.face_detector = face_detector
+        self.detector = face_detection.FaceAlignment(
+            face_detection.LandmarksType._2D,
+            flip_input=False,
+            face_detector=self.face_detector,
+        )
         self.multi_person = multi_person
         self.face_enhancement = face_enhancement
         self.batch_size = batch_size
@@ -508,14 +513,14 @@ class FirstOrderPredictor(BasePredictor):
         for driving_video in driving_videos[: len(bboxes)]:
             fps = driving_video["fps"]
 
-            try:
-                driving_video["frames"] = [
-                    cv2.resize(im, (self.image_size, self.image_size)) / 255.0
-                    for im in driving_video["frames"]
-                ]
-            except RuntimeError:
-                print("Read driving video error!")
-                pass
+            # try:
+            #     driving_video["frames"] = [
+            #         cv2.resize(im, (self.image_size, self.image_size)) / 255.0
+            #         for im in driving_video["frames"]
+            #     ]
+            # except RuntimeError:
+            #     print("Read driving video error!")
+            #     pass
 
             image_videos.append(driving_video)
         s4 = time()
@@ -793,14 +798,9 @@ class FirstOrderPredictor(BasePredictor):
         return np.concatenate(predictions)
 
     def extract_bbox(self, image):
-        detector = face_detection.FaceAlignment(
-            face_detection.LandmarksType._2D,
-            flip_input=False,
-            face_detector=self.face_detector,
-        )
 
         # frame = [image]
-        predictions = detector.get_detections_for_image(np.array(image))
+        predictions = self.detector.get_detections_for_image(np.array(image))
         predictions = list(
             filter(lambda x: ((x[3] - x[1]) * (x[2] - x[0])) > 1000, predictions)
         )
