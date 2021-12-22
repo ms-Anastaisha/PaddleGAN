@@ -536,36 +536,29 @@ class FirstOrderPredictor(BasePredictor):
         patch = np.zeros(img.shape).astype("uint8")
         mask = np.zeros(img.shape[:2]).astype("uint8")
 
-        for j, result in enumerate(results):
-            x1, y1, x2, y2, _ = result["rec"]
-            if i >= len(result["predict"]):
-                pass
-            else:
-                out = result["predict"][i]
-                out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
+        for i in trange(max([len(i["frames"]) for i in image_videos])):
+            frame = img.copy()
 
-            for i in trange(max([len(i["frames"]) for i in image_videos])):
-                if j == 0:
-                    frame = img.copy()
+            for j, result in enumerate(results):
+                x1, y1, x2, y2, _ = result["rec"]
+                if i >= len(result["predict"]):
+                    pass
                 else:
-                    frame = out_frame[i]
+                    out = result["predict"][i]
+                    out = cv2.resize(out.astype(np.uint8), (x2 - x1, y2 - y1))
 
-                if len(results) == 1:
-                    frame[y1:y2, x1:x2] = out
-                    break
-                else:
-                    patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
+                    if len(results) == 1:
+                        frame[y1:y2, x1:x2] = out
+                        break
+                    else:
+                        patch[y1:y2, x1:x2] = out * np.dstack([(box_masks[j] > 0)] * 3)
 
-                    mask[y1:y2, x1:x2] = box_masks[j]
-                frame = cv2.copyTo(patch, mask, frame)
-                patch[:, :, :] = 0
-                mask[:, :] = 0
-                if j == 0:
-                    out_frame.append(frame)
-                else:
-                    out_frame[i] = frame
-                
+                        mask[y1:y2, x1:x2] = box_masks[j]
+                    frame = cv2.copyTo(patch, mask, frame)
 
+            out_frame.append(frame)
+            patch[:, :, :] = 0
+            mask[:, :] = 0
         s7 = time()
         print(s7 - s6, "generate frame step")
         return self.write_with_audio(audio, out_frame, fps, decoration)
