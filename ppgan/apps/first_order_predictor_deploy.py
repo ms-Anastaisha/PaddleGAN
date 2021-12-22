@@ -331,7 +331,7 @@ class FirstOrderPredictor(BasePredictor):
         return frames
     
     def hover_frames(self, frames, hover):
-        return ne.evaluate("(1 - (1 - out_frame / 255)) * (1 - hover / 255) ) * 255")
+        return ne.evaluate("(1 - (1 - frames / 255) * (1 - hover / 255) ) * 255")
 
     def _decorate_frame(self, image, effect):
         return bm.screen(
