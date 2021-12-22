@@ -455,7 +455,7 @@ class FirstOrderPredictor(BasePredictor):
             # os.remove(temp.name)
             videoclip_2 = mp.ImageSequenceClip(out_frame, fps=fps)
             videoclip_2.write_videofile(
-                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=2Z, logger=None
+                out_file.name, preset="ultrafast", audio=audio, audio_codec="aac", threads=2, logger=None
             )
             videoclip_2.close()
             print("Audio time: {}".format(time() - s2))
